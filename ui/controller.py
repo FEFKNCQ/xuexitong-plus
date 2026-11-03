@@ -195,6 +195,11 @@ class AppController(QObject):
         self._clock.timeout.connect(self._tick)
         self._read_values()
         self._apply_theme()
+        from ui.updater import Updater
+
+        self._updater = Updater(APP_VERSION, self)
+
+    updater = Property(QObject, lambda self: self._updater, constant=True)
 
     # ----- configuration -------------------------------------------------
     def _read_values(self) -> None:
@@ -266,7 +271,8 @@ class AppController(QObject):
             self.toast.emit(f"保存失败：{exc}", "error")
             return False
         self._set_dirty(False)
-        self._log("INFO", f"配置已保存：{CONFIG_PATH}")
+        # No path here: the log is on screen and ends up in screenshots.
+        self._log("INFO", "配置已保存")
         return True
 
     @Slot()
@@ -303,6 +309,101 @@ class AppController(QObject):
             self.themeChanged.emit()
 
     themeMode = Property(str, _get_theme, _set_theme, notify=themeChanged)
+
+    # ----- general preferences (QSettings, not config.ini) ----------------
+    prefsChanged = Signal()
+
+    def _pref(self, key: str, default: bool) -> bool:
+        return str(self._settings.value(key, "true" if default else "false")).lower() == "true"
+
+    def _set_pref(self, key: str, value: bool) -> None:
+        if self._pref(key, not value) != value or self._settings.value(key) is None:
+            self._settings.setValue(key, "true" if value else "false")
+            self.prefsChanged.emit()
+
+    splashEnabled = Property(bool, lambda self: self._pref("ui/splash", True),
+                             lambda self, v: self._set_pref("ui/splash", v), notify=prefsChanged)
+    animationsEnabled = Property(bool, lambda self: self._pref("ui/animations", True),
+                                 lambda self, v: self._set_pref("ui/animations", v), notify=prefsChanged)
+    alertOnFinish = Property(bool, lambda self: self._pref("ui/alertOnFinish", True),
+                             lambda self, v: self._set_pref("ui/alertOnFinish", v), notify=prefsChanged)
+
+    # ----- data & privacy -------------------------------------------------
+    dataStatsChanged = Signal()
+
+    def _log_size_text(self) -> str:
+        from ui import winsetup
+
+        total = sum(p.stat().st_size for p in winsetup.log_files(DATA_DIR))
+        if total < 1024 * 1024:
+            return f"{total / 1024:.0f} KB"
+        return f"{total / 1024 / 1024:.1f} MB"
+
+    logSize = Property(str, _log_size_text, notify=dataStatsChanged)
+    hasCookiesFile = Property(bool, lambda self: (DATA_DIR / "cookies.txt").exists(), notify=dataStatsChanged)
+
+    @Slot()
+    def refreshDataStats(self) -> None:
+        self.dataStatsChanged.emit()
+
+    @Slot()
+    def clearAccountData(self) -> None:
+        from ui import winsetup
+
+        if self._process is not None:
+            self.toast.emit("任务运行中，停止后再清除账号数据。", "warning")
+            return
+        winsetup.clear_account_data(DATA_DIR)
+        self._config = load_config()
+        self._read_values()
+        self._set_dirty(False)
+        self.configChanged.emit()
+        self.dataStatsChanged.emit()
+        self.toast.emit("已清除账号、密码和 cookies。", "info")
+
+    @Slot()
+    def clearLogs(self) -> None:
+        from ui import winsetup
+
+        removed = 0
+        for path in winsetup.log_files(DATA_DIR):
+            try:
+                if path.name == "gui.log":
+                    path.write_text("", encoding="utf-8")  # still open by this process
+                else:
+                    path.unlink()
+                removed += 1
+            except OSError:
+                pass
+        self._log_model.clear()
+        self.dataStatsChanged.emit()
+        self.toast.emit(f"已清除运行日志（{removed} 个文件）。", "info")
+
+    @Slot()
+    def resetConfig(self) -> None:
+        """Restore config.ini from the template but keep the account fields."""
+        if self._process is not None:
+            self.toast.emit("任务运行中，停止后再恢复默认设置。", "warning")
+            return
+        keep = {k: self._values[k] for k in ("username", "password", "use_cookies")}
+        try:
+            CONFIG_PATH.unlink(missing_ok=True)
+        except OSError as exc:
+            self.toast.emit(f"恢复失败：{exc}", "error")
+            return
+        self._config = load_config()
+        self._read_values()
+        self._values.update(keep)
+        self.saveConfig()
+        self.configChanged.emit()
+        self.toast.emit("已恢复默认设置（账号信息保留）。", "info")
+
+    @Slot(str)
+    def openUrl(self, url: str) -> None:
+        QDesktopServices.openUrl(QUrl(url))
+
+    homepage = Property(str, lambda self: "https://github.com/Kerxs/XueXiTong-Plus", constant=True)
+    upstreamUrl = Property(str, lambda self: "https://github.com/Samueli924/chaoxing", constant=True)
 
     # ----- first-run guide -------------------------------------------------
     onboardingChanged = Signal()
@@ -430,6 +531,7 @@ class AppController(QObject):
 
     @Slot()
     def shutdown(self) -> None:
+        self._updater.shutdown()
         if self._process and self._process.state() != QProcess.ProcessState.NotRunning:
             self._process.kill()
             self._process.waitForFinished(1500)

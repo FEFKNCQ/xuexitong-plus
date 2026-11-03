@@ -16,7 +16,11 @@
 - `ui/qml/AppButton.qml`、`AppCheckBox.qml`、`AppSwitch.qml`、`AppTextField.qml`、`BaseDialog.qml`：自绘控件，外观不依赖 Quick Controls 样式（打包版若样式回退也保持一致）。新增按钮/勾选框/开关/对话框请用这些，不要直接用 `Button` / `CheckBox` / `Switch` / `Dialog`。动画时长统一用 `Theme.fast / normal / slow`。
 - `installer/setup.py` + `installer/qml/Setup.qml`：自制安装程序（欢迎 > 许可协议 > 安装选项 > 正在安装 > 完成），复用 `ui/qml` 的控件和 `Theme`。按当前用户安装到 `%LOCALAPPDATA%\Programs\学习通PLUS`，写 `HKCU\...\Uninstall\XueXiTongPlus`，可选桌面和开始菜单快捷方式。发行 zip 直接追加在安装程序 exe 末尾，`zipfile` 从文件尾部找到它；开发时用 `python installer\setup.py --payload dist\学习通PLUS-Windows.zip`。`--silent [--dir 路径] [--no-shortcuts]` 静默安装。日志在 `%TEMP%\xxtplus-setup.log`。
 - `ui/winsetup.py`：安装和卸载共用的注册表、快捷方式、进程检查逻辑。安装目录里会写 `.xxtplus-install` 标记文件，卸载只删除带这个标记的目录。
-- `ui/uninstall.py` + `ui/qml/Uninstall.qml`：卸载程序就是 `学习通PLUS.exe --uninstall`（`--quiet` 无界面）。删除快捷方式和注册表项，可选删除 `%APPDATA%\ChaoxingDesktop`，退出后由 cmd 延迟删除程序目录。
+- `ui/uninstall.py` + `ui/qml/Uninstall.qml`：卸载程序就是 `学习通PLUS.exe --uninstall`（`--quiet` 无界面，默认清除账号数据，`--keep-account` 保留）。删除快捷方式和注册表项；“清除账号数据”默认勾选（清空 config.ini 的账号密码、关闭 cookies 登录、删除 cookies.txt），也可删除整个 `%APPDATA%\ChaoxingDesktop` 和 QSettings。退出后由 cmd 延迟删除程序目录。
+- `ui/updater.py` + `ui/qml/UpdateDialog.qml`：联网更新。查询 `Kerxs/XueXiTong-Plus` 的 latest release，找名为 `学习通PLUS-Setup-*.exe` 的资源，下载到 `%TEMP%\xxtplus-update`，用 GitHub 提供的 `digest`（sha256）校验后启动安装程序并退出。仓库名改了要同步改 `REPO`。只有打包版会在启动时自动检查（`XXTPLUS_UPDATE_CHECK=1` 可在开发时强制）。发布新版本：改 `APP_VERSION` → 构建 → 新建 tag `v<版本>` 的 Release，上传 Setup.exe（和 zip）。
+- `packaging/app.spec` / `packaging/setup.spec` / `packaging/prune.py`：PyInstaller 打包。GUI 和 worker 打进同一个目录，共用一个 `_internal`（worker 不再是单文件，启动任务时不用解压）。`prune.py` 去掉不用的 Qt 模块（3D、Charts、多媒体、其他控件样式、翻译、软件 OpenGL 等）、ddddocr 不加载的两个模型、OpenCV 的 ffmpeg。注意 `PySide6.QtQuick` 依赖 `QtOpenGL.pyd`，不能删。改了裁剪规则后要跑 `tests/test_packaging_and_cleanup.py` 并启动打包版看 `gui.log`。
+- 设置页的界面偏好（主题、动画、启动动画、运行结束提醒、自动检查更新）都存 QSettings；`Theme.motion` 为 false 时所有 `Theme.fast/normal/slow` 变成 0。
+- 运行日志和设置界面里不显示本机完整路径（统一写 `%APPDATA%\ChaoxingDesktop`），避免截图泄露用户名。
 - `ui/controller.py`：`AppController`，暴露给 QML 的 `controller`。负责 `config.ini` 读写、启动/停止 worker、写 worker 标准输入（课程选择、Y/n 确认）、主题和预览数据。
 - `ui/output_parser.py`：把 worker 输出解析成事件（loguru 日志、tqdm 进度、课程列表、输入提示、预览事件）。纯 Python，无 Qt 依赖。
 - `ui/models.py`：日志模型（级别过滤、1200 行上限）和任务进度模型。

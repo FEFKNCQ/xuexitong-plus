@@ -36,10 +36,12 @@ QtObject {
     readonly property int gap: 12
     readonly property int pad: 16
 
-    // Motion
-    readonly property int fast: 140
-    readonly property int normal: 240
-    readonly property int slow: 380
+    // Motion. "界面动画" off in settings turns every transition into an instant change.
+    // (The installer has no `controller`, so it always animates.)
+    readonly property bool motion: typeof controller === "undefined" || !controller || controller.animationsEnabled
+    readonly property int fast: motion ? 140 : 0
+    readonly property int normal: motion ? 240 : 0
+    readonly property int slow: motion ? 380 : 0
 
     readonly property string uiFont: "Microsoft YaHei UI"
 

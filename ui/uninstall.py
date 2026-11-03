@@ -40,13 +40,13 @@ class Uninstaller(QObject):
         self._error = error
         self.stateChanged.emit()
 
-    @Slot(bool)
-    def uninstall(self, remove_data: bool) -> None:
+    @Slot(bool, bool)
+    def uninstall(self, clear_account: bool, remove_all: bool) -> None:
         self._set("working")
         # Let the UI paint the working state before doing the (quick) work.
-        QTimer.singleShot(400, lambda: self._run(remove_data))
+        QTimer.singleShot(400, lambda: self._run(clear_account, remove_all))
 
-    def _run(self, remove_data: bool) -> None:
+    def _run(self, clear_account: bool, remove_all: bool) -> None:
         if not (INSTALL_DIR / winsetup.MARKER).exists():
             self._set("error", "这个目录不是由安装程序创建的，已取消卸载。")
             return
@@ -59,8 +59,12 @@ class Uninstaller(QObject):
                 if link.exists():
                     link.unlink()
             winsetup.unregister()
-            if remove_data and winsetup.data_dir().exists():
-                shutil.rmtree(winsetup.data_dir(), ignore_errors=True)
+            if remove_all:
+                if winsetup.data_dir().exists():
+                    shutil.rmtree(winsetup.data_dir(), ignore_errors=True)
+                winsetup.clear_ui_settings()
+            elif clear_account:
+                winsetup.clear_account_data()
         except OSError as exc:
             self._set("error", f"{type(exc).__name__}: {exc}")
             return
@@ -74,9 +78,9 @@ class Uninstaller(QObject):
 
 
 def quiet_uninstall() -> int:
-    """``--uninstall --quiet``: no UI, keeps user data. Exit code 0 on success."""
+    """``--uninstall --quiet [--keep-account]``: no UI. Clears account data unless --keep-account."""
     uninstaller = Uninstaller()
-    uninstaller._run(remove_data=False)
+    uninstaller._run(clear_account="--keep-account" not in sys.argv, remove_all=False)
     if uninstaller._state != "done":
         return 1
     uninstaller.finish()

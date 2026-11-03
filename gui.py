@@ -42,10 +42,31 @@ def _install_log() -> None:
         line = f"{time.strftime('%H:%M:%S')} {_LEVELS.get(mode, 'INFO'):<7} {message}"
         log.write(line + "\n")
         log.flush()
-        if sys.stderr is not None:
+        if sys.stderr is not None and not isinstance(sys.stderr, _LogStream):
             print(line, file=sys.stderr)
 
     qInstallMessageHandler(handler)
+
+    # The packaged GUI has no console: send Python tracebacks to the same log.
+    class _LogStream:
+        def write(self, text):
+            if text.strip():
+                log.write(text if text.endswith("\n") else text + "\n")
+                log.flush()
+
+        def flush(self):
+            log.flush()
+
+    if sys.stderr is None:
+        sys.stderr = _LogStream()
+
+    def excepthook(kind, value, tb):
+        import traceback
+
+        log.write("".join(traceback.format_exception(kind, value, tb)))
+        log.flush()
+
+    sys.excepthook = excepthook
 
 
 def main() -> None:

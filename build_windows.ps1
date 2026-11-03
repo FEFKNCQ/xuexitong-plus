@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $buildRoot = Join-Path $projectRoot ".build"
@@ -40,45 +40,19 @@ if ($LASTEXITCODE -ne 0) { throw "Application icon generation failed." }
 
 $distRoot = Join-Path $projectRoot "dist"
 $workRoot = Join-Path $buildRoot "pyinstaller"
-$workerExe = Join-Path $distRoot "chaoxing-worker.exe"
 New-Item -ItemType Directory -Path $distRoot -Force | Out-Null
-
-Remove-Item -LiteralPath $workerExe -Force -ErrorAction SilentlyContinue
+foreach ($old in @("Chaoxing", "Chaoxing-Windows", "学习通PLUS", "chaoxing-worker.exe", "Chaoxing-Windows.zip", "学习通PLUS-Windows.zip")) {
+    Remove-Item -LiteralPath (Join-Path $distRoot $old) -Recurse -Force -ErrorAction SilentlyContinue
+}
 Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
-& $pythonExe -m PyInstaller --noconfirm --clean --onefile --console `
-    --name chaoxing-worker `
-    --add-data "$projectRoot\resource;resource" `
-    --hidden-import api.captcha `
-    --collect-data ddddocr `
-    --distpath $distRoot --workpath $workRoot `
-    (Join-Path $projectRoot "worker.py")
-if ($LASTEXITCODE -ne 0) { throw "Worker executable build failed." }
 
-$guiWork = Join-Path $buildRoot "pyinstaller-gui"
-Remove-Item -LiteralPath (Join-Path $distRoot "Chaoxing") -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath (Join-Path $distRoot "Chaoxing-Windows.zip") -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath (Join-Path $distRoot "Chaoxing-Windows") -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath (Join-Path $distRoot "学习通PLUS") -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath (Join-Path $distRoot "学习通PLUS-Windows.zip") -Force -ErrorAction SilentlyContinue
-Remove-Item -LiteralPath $guiWork -Recurse -Force -ErrorAction SilentlyContinue
-& $pythonExe -m PyInstaller --noconfirm --clean --onedir --windowed `
-    --name 学习通PLUS `
-    --icon "$projectRoot\assets\learning_plus.ico" `
-    --add-data "$projectRoot\config_template.ini;." `
-    --add-data "$projectRoot\ui\qml;ui\qml" `
-    --add-data "$projectRoot\assets\learning_plus.png;assets" `
-    --add-data "$pythonRoot\Lib\site-packages\PySide6\qml;PySide6\qml" `
-    --add-binary "$pythonRoot\Lib\site-packages\PySide6\plugins\webview\qtwebview_webview2.dll;PySide6\plugins\webview" `
-    --hidden-import PySide6.QtQml `
-    --hidden-import PySide6.QtQuick `
-    --hidden-import PySide6.QtQuickControls2 `
-    --hidden-import PySide6.QtWebView `
-    --distpath $distRoot --workpath $guiWork `
-    (Join-Path $projectRoot "gui.py")
-if ($LASTEXITCODE -ne 0) { throw "GUI executable build failed." }
+# GUI and worker are built together (packaging\app.spec) into one folder that shares a
+# single _internal directory; packaging\prune.py drops Qt modules, models and DLLs we never load.
+& $pythonExe -m PyInstaller --noconfirm --clean --distpath $distRoot --workpath $workRoot `
+    (Join-Path $projectRoot "packaging\app.spec")
+if ($LASTEXITCODE -ne 0) { throw "Application build failed." }
 
 $releaseDir = Join-Path $distRoot "学习通PLUS"
-Copy-Item -LiteralPath $workerExe -Destination (Join-Path $releaseDir "chaoxing-worker.exe") -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "README_DESKTOP.md") -Destination (Join-Path $releaseDir "README.txt") -Force
 $releaseAssets = Join-Path $releaseDir "assets"
 New-Item -ItemType Directory -Path $releaseAssets -Force | Out-Null
@@ -100,20 +74,8 @@ $appVersion = if ($versionMatch) { $versionMatch.Matches[0].Groups[1].Value } el
 $setupWork = Join-Path $buildRoot "pyinstaller-setup"
 $setupDist = Join-Path $buildRoot "setup-dist"
 Remove-Item -LiteralPath $setupWork, $setupDist -Recurse -Force -ErrorAction SilentlyContinue
-& $pythonExe -m PyInstaller --noconfirm --clean --onefile --windowed `
-    --name setup-stub `
-    --icon "$projectRoot\assets\learning_plus.ico" `
-    --paths $projectRoot `
-    --add-data "$projectRoot\ui\qml;ui\qml" `
-    --add-data "$projectRoot\installer\qml;installer\qml" `
-    --add-data "$projectRoot\assets\learning_plus.png;assets" `
-    --hidden-import PySide6.QtQml `
-    --hidden-import PySide6.QtQuick `
-    --hidden-import PySide6.QtQuickControls2 `
-    --exclude-module PySide6.QtWebView `
-    --exclude-module PySide6.QtWebEngineCore `
-    --distpath $setupDist --workpath $setupWork `
-    (Join-Path $projectRoot "installer\setup.py")
+& $pythonExe -m PyInstaller --noconfirm --clean --distpath $setupDist --workpath $setupWork `
+    (Join-Path $projectRoot "packaging\setup.spec")
 if ($LASTEXITCODE -ne 0) { throw "Setup program build failed." }
 Get-ChildItem -LiteralPath $distRoot -Filter "学习通PLUS-Setup-*.exe" -ErrorAction SilentlyContinue | Remove-Item -Force
 $installer = Join-Path $distRoot "学习通PLUS-Setup-$appVersion.exe"

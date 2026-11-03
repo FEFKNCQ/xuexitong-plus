@@ -158,3 +158,6 @@ cache.json
 start*.bat
 .workbuddy/
 myConfig/
+
+# Packaging specs are source here
+!packaging/*.spec

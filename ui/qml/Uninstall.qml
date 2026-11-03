@@ -7,11 +7,11 @@ import "."
 ApplicationWindow {
     id: window
     width: 560
-    height: 420
+    height: 440
     minimumWidth: 560
-    minimumHeight: 420
+    minimumHeight: 440
     maximumWidth: 560
-    maximumHeight: 420
+    maximumHeight: 440
     visible: true
     flags: Qt.Window | Qt.FramelessWindowHint
     color: "transparent"
@@ -102,20 +102,32 @@ ApplicationWindow {
                 wrapMode: Text.Wrap
             }
 
-            AppCheckBox {
-                id: removeData
+            ColumnLayout {
                 visible: uninstaller.installed && window.state === "confirm"
-                text: "同时删除配置、cookies 和日志"
-            }
-            Text {
-                visible: removeData.visible
-                Layout.fillWidth: true
-                text: removeData.checked ? "将删除：" + uninstaller.dataDir : "保留在：" + uninstaller.dataDir + "，以后重新安装可以继续使用。"
-                color: removeData.checked ? Theme.warning : Theme.faint
-                font.family: Theme.uiFont
-                font.pixelSize: 11
-                wrapMode: Text.WrapAnywhere
-                Behavior on color { ColorAnimation { duration: Theme.normal } }
+                spacing: 6
+                AppCheckBox {
+                    id: clearAccount
+                    text: "清除账号数据（账号、密码、cookies）"
+                    checked: true
+                    enabled: !removeAll.checked
+                    opacity: enabled ? 1 : 0.5
+                }
+                AppCheckBox {
+                    id: removeAll
+                    text: "删除全部配置、日志和界面设置"
+                }
+                Text {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 30
+                    text: removeAll.checked ? "将删除整个配置目录 %APPDATA%\\ChaoxingDesktop"
+                        : clearAccount.checked ? "其他设置和日志保留在 %APPDATA%\\ChaoxingDesktop"
+                        : "账号和设置保留在 %APPDATA%\\ChaoxingDesktop，以后重新安装可以继续使用。"
+                    color: removeAll.checked || !clearAccount.checked ? Theme.warning : Theme.faint
+                    font.family: Theme.uiFont
+                    font.pixelSize: 11
+                    wrapMode: Text.WrapAnywhere
+                    Behavior on color { ColorAnimation { duration: Theme.normal } }
+                }
             }
 
             // Indeterminate bar while working.
@@ -151,7 +163,7 @@ ApplicationWindow {
                     text: "卸载"
                     glyph: ""
                     kind: "danger"
-                    onClicked: uninstaller.uninstall(removeData.checked)
+                    onClicked: uninstaller.uninstall(clearAccount.checked || removeAll.checked, removeAll.checked)
                 }
                 AppButton {
                     visible: window.state === "done"

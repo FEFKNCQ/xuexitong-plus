@@ -20,9 +20,12 @@ ApplicationWindow {
     readonly property bool accountConfigured: controller.useCookies
         || (controller.username.trim() !== "" && controller.password !== "")
     readonly property bool overlayOpen: coursePicker.visible || stopConfirm.visible
-        || closeConfirm.visible || promptDialog.visible || guide.visible
+        || closeConfirm.visible || promptDialog.visible || guide.visible || updateDialog.visible
 
-    Component.onCompleted: showGuide = !controller.onboardingDone
+    Component.onCompleted: {
+        showGuide = !controller.onboardingDone
+        controller.updater.checkOnStartup()
+    }
 
     function openSettings() { window.page = 1 }
 
@@ -232,6 +235,7 @@ ApplicationWindow {
                     pageIndex: 1
                     SettingsPage {
                         anchors.fill: parent
+                        onUpdateRequested: window.showUpdates()
                         onGuideRequested: {
                             guide.reset()
                             window.showGuide = true
@@ -306,6 +310,24 @@ ApplicationWindow {
     }
 
     // ---------- dialogs ----------
+    UpdateDialog {
+        id: updateDialog
+        onInstallRequested: {
+            if (controller.updater.installAndQuit()) {
+                window.allowClose = true
+                controller.shutdown()
+                Qt.quit()
+            }
+        }
+    }
+    Connections {
+        target: controller.updater
+        function onUpdateAvailable() {
+            if (!guide.visible) updateDialog.open()
+        }
+    }
+    function showUpdates() { updateDialog.open() }
+
     CoursePickerDialog { id: coursePicker; objectName: "coursePicker" }
 
     ConfirmDialog {
@@ -347,6 +369,12 @@ ApplicationWindow {
                 coursePicker.close()
                 promptDialog.close()
                 stopConfirm.close()
+                if (controller.statusKind === "done" || controller.statusKind === "error") {
+                    if (controller.alertOnFinish && !window.active)
+                        window.alert(0)  // flash the taskbar button until the window is focused
+                    toast.show(controller.statusKind === "done" ? "任务已全部完成" : "任务进程已退出，请查看运行日志",
+                               controller.statusKind === "done" ? "info" : "warning")
+                }
             }
         }
         function onCourseSelectionRequested(courses) { coursePicker.openWith(courses) }

@@ -34,6 +34,60 @@ def data_dir() -> Path:
     return Path(os.environ.get("APPDATA", Path.home())) / "ChaoxingDesktop"
 
 
+ACCOUNT_FILES = ("cookies.txt", ".cookies.txt")
+LOG_PATTERNS = ("chaoxing*.log", "gui.log")
+
+
+def clear_account_data(folder: Path | None = None) -> None:
+    """Blank the account, password and cookies login in config.ini and delete cookies files."""
+    import configparser
+
+    folder = folder or data_dir()
+    config_path = folder / "config.ini"
+    if config_path.exists():
+        config = configparser.ConfigParser(interpolation=None)
+        config.read(config_path, encoding="utf-8")
+        if config.has_section("common"):
+            for key in ("username", "password"):
+                config["common"][key] = ""
+            config["common"]["use_cookies"] = "false"
+            with config_path.open("w", encoding="utf-8") as fh:
+                config.write(fh)
+    for name in ACCOUNT_FILES:
+        try:
+            (folder / name).unlink()
+        except FileNotFoundError:
+            pass
+
+
+def log_files(folder: Path | None = None) -> list[Path]:
+    folder = folder or data_dir()
+    found: list[Path] = []
+    for pattern in LOG_PATTERNS:
+        found.extend(p for p in folder.glob(pattern) if p.is_file())
+    return found
+
+
+def clear_ui_settings() -> None:
+    """Remove the QSettings tree (theme, window size, onboarding state) from HKCU."""
+    import winreg
+
+    def delete_tree(root, path):
+        try:
+            with winreg.OpenKey(root, path, 0, winreg.KEY_ALL_ACCESS) as key:
+                while True:
+                    try:
+                        child = winreg.EnumKey(key, 0)
+                    except OSError:
+                        break
+                    delete_tree(root, path + "\\" + child)
+            winreg.DeleteKey(root, path)
+        except OSError:
+            pass
+
+    delete_tree(winreg.HKEY_CURRENT_USER, r"Software\ChaoxingDesktop")
+
+
 def desktop_shortcut() -> Path:
     return Path(os.environ.get("USERPROFILE", Path.home())) / "Desktop" / f"{APP_NAME}.lnk"
 

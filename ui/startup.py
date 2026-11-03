@@ -10,7 +10,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
+from PySide6.QtCore import Property, QObject, QSettings, QTimer, QUrl, Signal, Slot, qCritical
 from PySide6.QtQml import QQmlApplicationEngine, QQmlComponent, QQmlEngine, QQmlIncubator
 
 APP_NAME = "学习通PLUS"
@@ -19,8 +19,8 @@ QML_DIR = ROOT_DIR / "ui" / "qml"
 
 
 class _Incubator(QQmlIncubator):
-    def __init__(self, on_status) -> None:
-        super().__init__(QQmlIncubator.IncubationMode.Asynchronous)
+    def __init__(self, on_status, mode=QQmlIncubator.IncubationMode.Asynchronous) -> None:
+        super().__init__(mode)
         self._on_status = on_status
 
     def statusChanged(self, status) -> None:  # noqa: N802 - Qt override
@@ -45,6 +45,7 @@ class StartupLoader(QObject):
         self._component: QQmlComponent | None = None
         self._incubator: _Incubator | None = None
         self._splash_done = False
+        self._sync_create = False
 
     # ----- properties read by Splash.qml ---------------------------------
     status = Property(str, lambda self: self._status, notify=statusChanged)
@@ -61,6 +62,12 @@ class StartupLoader(QObject):
     # ----- sequence ------------------------------------------------------
     def start(self) -> None:
         self._engine.rootContext().setContextProperty("startup", self)
+        # "启动动画" off in settings: no splash; the window opens once loading is done.
+        if str(QSettings().value("ui/splash", "true")).lower() != "true":
+            self._splash_done = True
+            self._sync_create = True
+            QTimer.singleShot(0, self._load_config)
+            return
         self._engine.load(QUrl.fromLocalFile(str(QML_DIR / "Splash.qml")))
         splash = self._engine.rootObjects()[-1] if self._engine.rootObjects() else None
         if splash is not None:
@@ -111,7 +118,9 @@ class StartupLoader(QObject):
 
     def _create_window(self) -> None:
         self._step("创建主窗口", 0.7)
-        self._incubator = _Incubator(self._on_incubator_status)
+        # Async incubation needs the splash window's incubation controller; without a splash, create synchronously.
+        mode = QQmlIncubator.IncubationMode.Synchronous if self._sync_create else QQmlIncubator.IncubationMode.Asynchronous
+        self._incubator = _Incubator(self._on_incubator_status, mode)
         self._component.create(self._incubator, self._engine.rootContext())
         self._on_incubator_status(self._incubator.status())
 
@@ -132,7 +141,7 @@ class StartupLoader(QObject):
             self._reveal()
 
     def _fail(self, message: str) -> None:
-        print(message, file=sys.stderr, flush=True)
+        qCritical(f"界面加载失败: {message}")
         self._step("界面加载失败", 1.0)
         QTimer.singleShot(1500, lambda: self._app.exit(1))
 

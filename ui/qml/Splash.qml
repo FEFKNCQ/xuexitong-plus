@@ -125,14 +125,14 @@ Window {
     Timer {
         id: typer
         // Uneven intervals read more like streamed tokens than a metronome.
-        interval: 260
+        interval: 120
         repeat: true
         onTriggered: {
             if (!splash.typed) {
                 splash.shown += 1
                 // The space and the Latin letters stream a little faster than the hanzi.
                 const next = splash.fullText.charAt(splash.shown)
-                interval = (next === " " || /[A-Z]/.test(next) ? 150 : 230) + Math.round(Math.random() * 120)
+                interval = (next === " " || /[A-Z]/.test(next) ? 70 : 110) + Math.round(Math.random() * 50)
             } else {
                 stop()
             }
@@ -141,19 +141,19 @@ Window {
 
     Timer {
         id: hold
-        interval: 600
+        interval: 250
         onTriggered: outro.start()
     }
 
     SequentialAnimation {
         id: intro
         ParallelAnimation {
-            NumberAnimation { target: card; property: "opacity"; to: 1; duration: 240; easing.type: Easing.OutCubic }
-            NumberAnimation { target: card; property: "scale"; to: 1; duration: 280; easing.type: Easing.OutCubic }
+            NumberAnimation { target: card; property: "opacity"; to: 1; duration: 160; easing.type: Easing.OutCubic }
+            NumberAnimation { target: card; property: "scale"; to: 1; duration: 180; easing.type: Easing.OutCubic }
         }
         ParallelAnimation {
-            NumberAnimation { target: icon; property: "opacity"; to: 1; duration: 280 }
-            NumberAnimation { target: icon; property: "scale"; to: 1; duration: 380; easing.type: Easing.OutBack }
+            NumberAnimation { target: icon; property: "opacity"; to: 1; duration: 180 }
+            NumberAnimation { target: icon; property: "scale"; to: 1; duration: 240; easing.type: Easing.OutBack }
         }
         ScriptAction { script: typer.start() }
     }
@@ -161,8 +161,8 @@ Window {
     SequentialAnimation {
         id: outro
         ParallelAnimation {
-            NumberAnimation { target: card; property: "opacity"; to: 0; duration: 260; easing.type: Easing.InCubic }
-            NumberAnimation { target: card; property: "scale"; to: 1.03; duration: 260; easing.type: Easing.InCubic }
+            NumberAnimation { target: card; property: "opacity"; to: 0; duration: 180; easing.type: Easing.InCubic }
+            NumberAnimation { target: card; property: "scale"; to: 1.03; duration: 180; easing.type: Easing.InCubic }
         }
         ScriptAction {
             script: {
