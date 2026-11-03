@@ -34,6 +34,7 @@ from ui.output_parser import (
     StreamDecoder,
     strip_ansi,
     ProgressEvent,
+    clock_seconds,
     PromptEvent,
     VideoPreviewEvent,
     WorkPreviewEvent,
@@ -99,6 +100,13 @@ def video_source_html(source: str) -> str:
         disableremoteplayback controlslist="nodownload noplaybackrate nofullscreen">
         <source src="{safe_source}"></video><script>
         const player=document.getElementById('preview'); player.muted=true;
+        // #t=<seconds>&r=<rate>: open at the task's position and play at its speed; cxSync(t)
+        // (called from the app as the task advances) pulls the picture back if it drifts.
+        const hash=new URLSearchParams(location.hash.slice(1));
+        const rate=Math.min(4,Math.max(0.5,parseFloat(hash.get('r'))||1));
+        const seekTo=t=>{{if(!(t>=0)||!isFinite(player.duration))return;player.currentTime=Math.min(t,Math.max(0,player.duration-0.5));}};
+        player.addEventListener('loadedmetadata',()=>{{player.playbackRate=rate;seekTo(parseFloat(hash.get('t')));}},{{once:true}});
+        window.cxSync=t=>{{if(player.readyState>=1&&Math.abs(player.currentTime-t)>4)seekTo(t);}};
         player.addEventListener('canplay',()=>player.play().catch(()=>{{}}),{{once:true}});
         player.addEventListener('loadeddata',()=>player.play().catch(()=>{{}}),{{once:true}});
         player.addEventListener('error',()=>{{document.body.innerHTML='<div style="color:#8e9bb3;font:14px Segoe UI;display:flex;height:100%;align-items:center;justify-content:center">视频加载失败</div>'}},true);
@@ -161,6 +169,7 @@ class AppController(QObject):
     runStateChanged = Signal()
     dashboardChanged = Signal()
     videoChanged = Signal()
+    videoProgressChanged = Signal()
     workChanged = Signal()
     themeChanged = Signal()
     toast = Signal(str, str)  # message, kind
@@ -190,6 +199,7 @@ class AppController(QObject):
         self._video_message = "等待视频任务开始"
         self._video_page = ""
         self._video_title = ""
+        self._video_pos = -1.0          # task position of the previewed video, seconds (-1 unknown)
         self._video_active = False
         self._work: dict = {}
         self._work_status = ""
@@ -740,6 +750,11 @@ class AppController(QObject):
             self.dashboardChanged.emit()
         elif isinstance(event, ProgressEvent):
             self._task_model.upsert(event.name, percent=event.percent, detail=f"{event.done} / {event.total}")
+            if self._video_active and event.name == self._video_title:
+                seconds = clock_seconds(event.done)
+                if seconds is not None and seconds != self._video_pos:
+                    self._video_pos = seconds
+                    self.videoProgressChanged.emit()
         elif isinstance(event, VideoPreviewEvent):
             if not event.valid:
                 self._set_video(video_message_html("无法读取当前视频预览"), "", False, "无法读取当前视频预览")
@@ -796,9 +811,27 @@ class AppController(QObject):
         self._video_html = markup
         self._video_message = message
         self._video_page = page_url
+        if title != self._video_title:
+            self._video_pos = -1.0
         self._video_title = title
         self._video_active = active
         self.videoChanged.emit()
+
+    def _video_rate(self) -> float:
+        try:
+            return float(self._values.get("speed", "1"))
+        except (TypeError, ValueError):
+            return 1.0
+
+    @Slot(result=str)
+    def videoPageAtPosition(self) -> str:
+        """Preview page URL that opens at the task's current position and speed."""
+        if not self._video_page:
+            return ""
+        position = max(0.0, self._video_pos)
+        return f"{self._video_page}#t={position:g}&r={self._video_rate():g}"
+
+    videoPosition = Property(float, lambda self: self._video_pos, notify=videoProgressChanged)
 
     videoHtml = Property(str, lambda self: self._video_html, notify=videoChanged)
     videoTitle = Property(str, lambda self: self._video_title, notify=videoChanged)

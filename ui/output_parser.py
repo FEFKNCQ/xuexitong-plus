@@ -112,6 +112,20 @@ class StreamDecoder:
         return self._decoder.decode(data, final)
 
 
+def clock_seconds(text: str) -> float | None:
+    """Seconds from a progress counter: "MM:SS" / "HH:MM:SS" (the worker's video bars) or a number."""
+    text = text.strip()
+    try:
+        if ":" in text:
+            seconds = 0.0
+            for part in text.split(":"):
+                seconds = seconds * 60 + float(part)
+            return seconds
+        return float(text)
+    except ValueError:
+        return None
+
+
 def strip_ansi(text: str) -> str:
     return ANSI_RE.sub("", text)
 

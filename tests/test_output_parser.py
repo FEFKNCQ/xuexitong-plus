@@ -166,5 +166,16 @@ class WorkPreviewEmitTestCase(unittest.TestCase):
         self.assertEqual(_work_preview_questions([q, "bad"])[0]["answer"], "A")
 
 
+
+class ClockSecondsTestCase(unittest.TestCase):
+    def test_formats(self):
+        from ui.output_parser import clock_seconds
+
+        self.assertEqual(clock_seconds("01:57"), 117)
+        self.assertEqual(clock_seconds("1:02:03"), 3723)
+        self.assertEqual(clock_seconds("432"), 432)
+        self.assertIsNone(clock_seconds("1.08k"))
+        self.assertIsNone(clock_seconds(""))
+
 if __name__ == "__main__":
     unittest.main()

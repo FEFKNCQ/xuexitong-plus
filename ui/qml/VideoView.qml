@@ -28,8 +28,10 @@ Rectangle {
             return
         // Prefer the page served by the local video proxy: WebView2 turns loadHtml() into a
         // data: URL navigation, which does not reliably play the video.
+        // The page opens at the task's current position (a fresh web view after switching
+        // pages or closing a dialog would otherwise restart the video from 0).
         if (controller.videoPageUrl !== "")
-            view.url = controller.videoPageUrl
+            view.url = controller.videoPageAtPosition()
         else
             view.loadHtml(controller.videoHtml, controller.videoBaseUrl)
     }
@@ -46,6 +48,15 @@ Rectangle {
             settings.localContentCanAccessFileUrls: false
         }
         onLoaded: root.reload()
+    }
+
+    // Keep the picture in step with the task while it plays.
+    Connections {
+        target: controller
+        function onVideoProgressChanged() {
+            if (webLoader.item && controller.videoActive && controller.videoPosition >= 0)
+                webLoader.item.runJavaScript("window.cxSync && cxSync(" + controller.videoPosition + ")")
+        }
     }
 
     Connections {
