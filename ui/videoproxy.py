@@ -8,7 +8,7 @@ Referer / User-Agent the CDN expects, passing Range through so the <video> eleme
 can stream and seek.
 
 Only URLs the app registered are served (each under a random token) and only for
-*.chaoxing.com, so this is not an open proxy.
+*.chaoxing.com / *.cldisk.com (the video CDN), so this is not an open proxy.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def allowed(url: str, hosts: tuple[str, ...]) -> bool:
 
 
 class VideoProxy:
-    def __init__(self, allowed_hosts: tuple[str, ...] = ("chaoxing.com",), referer: str = REFERER) -> None:
+    def __init__(self, allowed_hosts: tuple[str, ...] = ("chaoxing.com", "cldisk.com"), referer: str = REFERER) -> None:
         self.allowed_hosts = allowed_hosts
         self.referer = referer
         self._urls: OrderedDict[str, str] = OrderedDict()

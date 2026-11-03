@@ -87,6 +87,12 @@ class VideoProxyTestCase(unittest.TestCase):
         self.assertFalse(allowed("https://chaoxing.com.evil.io/x.mp4", hosts))
         self.assertFalse(allowed("file:///C:/x.mp4", hosts))
 
+    def test_default_hosts_cover_cdn(self):
+        hosts = VideoProxy().allowed_hosts
+        self.assertTrue(allowed("https://s2.cldisk.com/sv-w8/video/x/sd.mp4", hosts))
+        self.assertTrue(allowed("https://s1.ananas.chaoxing.com/x.mp4", hosts))
+        self.assertFalse(allowed("https://evilcldisk.com/x.mp4", hosts))
+
 
 if __name__ == "__main__":
     unittest.main()

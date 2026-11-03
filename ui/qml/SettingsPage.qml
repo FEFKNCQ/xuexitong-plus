@@ -41,8 +41,12 @@ Item {
 
     component Divider: Rectangle { Layout.fillWidth: true; height: 1; color: Theme.border }
 
+    // Title, cards and save bar share one width and sit centred in the page.
     ColumnLayout {
-        anchors.fill: parent
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: Math.min(parent.width, 880)
         spacing: Theme.gap
 
         ColumnLayout {
@@ -70,7 +74,7 @@ Item {
             clip: true
 
             ColumnLayout {
-                width: Math.min(scroll.availableWidth, 880)
+                width: scroll.availableWidth
                 spacing: Theme.gap
 
                 // ---------- 账号 ----------

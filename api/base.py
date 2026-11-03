@@ -947,7 +947,9 @@ class Chaoxing:
                     parsed = urlsplit(candidate)
                 except ValueError:
                     continue
-                if parsed.scheme in {"http", "https"} and parsed.hostname and parsed.hostname.endswith(".chaoxing.com"):
+                # The video CDN is on cldisk.com (e.g. s2.cldisk.com), not chaoxing.com.
+                host = (parsed.hostname or "").lower()
+                if parsed.scheme in {"http", "https"} and host.endswith((".chaoxing.com", ".cldisk.com")):
                     source = candidate
                     break
             preview_event = {

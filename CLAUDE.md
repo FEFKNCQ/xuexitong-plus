@@ -26,7 +26,7 @@
   - 两种模式：本机启动 llama-server（自动检测：设置路径 → PATH → 常见安装目录，运行 `--version`），或连接已运行的 OpenAI 兼容服务。参数：模型 / mmproj 路径、端口、上下文、GPU 层数、线程、温度、最大 token、额外参数。用 `/health` 等待模型加载，`/v1/chat/completions` 流式推理；停止时结束整个进程树。
   - 题目来源：当前章节检测（来自运行面板的预览数据，自动带上识别到的课程和章节）、手动粘贴（自动拆出题干和选项）、图片（需要 mmproj，多模态）。
   - 测试：`tests/test_localai.py` 用 `tests/fake_llama_server.py` 模拟 llama-server，覆盖检测、启动、加载等待、连接测试、流式推理、错误、崩溃退出、审核门槛。
-- `ui/videoproxy.py`：视频预览的本地代理（只监听 127.0.0.1，只代理已登记的 `*.chaoxing.com` 地址）。WebView2 的 `loadHtml()` 实际是 data: URL，CDN 收不到学习通的 Referer 会拒绝视频；现在预览页面和视频都由代理提供，代理转发时带上 Referer 并透传 Range。
+- `ui/videoproxy.py`：视频预览的本地代理（只监听 127.0.0.1，只代理已登记的 `*.chaoxing.com` / `*.cldisk.com` 地址；视频 CDN 实际在 `s1/s2.cldisk.com`）。WebView2 的 `loadHtml()` 实际是 data: URL，CDN 收不到学习通的 Referer 会拒绝视频；现在预览页面和视频都由代理提供，代理转发时带上 Referer 并透传 Range。
 - `ui/tray.py`：后台模式（系统托盘 + 单实例）。关闭窗口默认隐藏到托盘，任务继续；再次启动程序会唤出已运行的窗口。所有真正退出的路径都走 `Main.qml` 的 `quitApp()`。
 - 编码：打包版 worker 不认 `PYTHONUTF8`，`worker.py` 启动时强制 stdout/stderr 为 UTF-8；GUI 用 `StreamDecoder` 增量解码，遇到非 UTF-8 自动改用 GB18030。
 - 运行日志和设置界面里不显示本机完整路径（统一写 `%APPDATA%\ChaoxingDesktop`），避免截图泄露用户名。
