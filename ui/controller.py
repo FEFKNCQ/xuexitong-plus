@@ -1,0 +1,543 @@
+# -*- coding: utf-8 -*-
+"""Bridge between the QML interface, ``config.ini`` and the worker process."""
+
+from __future__ import annotations
+
+import configparser
+import html
+import os
+import sys
+import time
+from pathlib import Path
+
+from PySide6.QtCore import (
+    Property,
+    QObject,
+    QProcess,
+    QProcessEnvironment,
+    QSettings,
+    QTimer,
+    QUrl,
+    Qt,
+    Signal,
+    Slot,
+)
+from PySide6.QtGui import QDesktopServices, QGuiApplication
+
+from ui.models import LogModel, TaskModel
+from ui.output_parser import (
+    ActivityEvent,
+    CourseListEvent,
+    LogEvent,
+    OutputParser,
+    ProgressEvent,
+    PromptEvent,
+    VideoPreviewEvent,
+    WorkPreviewEvent,
+)
+
+APP_NAME = "学习通PLUS"
+APP_VERSION = "3.2.0"
+ROOT_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+BUNDLE_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else ROOT_DIR
+
+if os.name == "nt":
+    DATA_DIR = Path(os.environ.get("APPDATA", Path.home())) / "ChaoxingDesktop"
+else:
+    DATA_DIR = Path.home() / ".config" / "chaoxing-desktop"
+CONFIG_PATH = DATA_DIR / "config.ini"
+
+SPEED_OPTIONS = ["1", "1.25", "1.5", "1.75", "2"]
+VIDEO_BASE_URL = "https://mooc1.chaoxing.com/ananas/modules/video/index.html?v=2025-0725-1842"
+TYPE_LABELS = {
+    "single": "单选题",
+    "multiple": "多选题",
+    "judgement": "判断题",
+    "completion": "填空题",
+}
+
+
+def load_config() -> configparser.ConfigParser:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if not CONFIG_PATH.exists():
+        template = ROOT_DIR / "config_template.ini"
+        if template.exists():
+            CONFIG_PATH.write_bytes(template.read_bytes())
+
+    config = configparser.ConfigParser(interpolation=None)
+    config.read(CONFIG_PATH, encoding="utf-8")
+    for section in ("common", "tiku", "notification"):
+        if not config.has_section(section):
+            config.add_section(section)
+
+    # Turn the template placeholders into empty form fields.
+    for key in ("username", "password", "course_list"):
+        if config["common"].get(key, "").strip().lower() == "xxx":
+            config["common"][key] = ""
+    return config
+
+
+def video_message_html(message: str, sub: str = "运行学习通视频任务后，画面会自动显示") -> str:
+    return f"""<!doctype html><html><head><meta charset="utf-8"><style>
+        html,body{{height:100%;margin:0;background:#0b1020;color:#d7e0ee;font-family:'Segoe UI','Microsoft YaHei UI',sans-serif}}
+        body{{display:flex;align-items:center;justify-content:center;text-align:center;user-select:none}}
+        .box{{padding:32px}} .title{{font-size:20px;font-weight:600}} .sub{{margin-top:10px;color:#8e9bb3;font-size:13px}}
+        </style></head><body><div class="box"><div class="title">{html.escape(message)}</div>
+        <div class="sub">{html.escape(sub)}</div></div></body></html>"""
+
+
+def video_source_html(source: str) -> str:
+    safe_source = html.escape(source, quote=True)
+    return f"""<!doctype html><html><head><meta charset="utf-8"><meta name="referrer" content="unsafe-url">
+        <style>html,body{{width:100%;height:100%;margin:0;background:#05080f;overflow:hidden}}
+        body{{pointer-events:none;user-select:none}}
+        video{{position:fixed;inset:0;width:100%;height:100%;object-fit:contain;background:#05080f;pointer-events:none}}
+        </style></head><body><video id="preview" autoplay muted playsinline disablepictureinpicture
+        disableremoteplayback controlslist="nodownload noplaybackrate nofullscreen">
+        <source src="{safe_source}"></video><script>
+        const player=document.getElementById('preview'); player.muted=true;
+        player.addEventListener('canplay',()=>player.play().catch(()=>{{}}),{{once:true}});
+        player.addEventListener('loadeddata',()=>player.play().catch(()=>{{}}),{{once:true}});
+        player.addEventListener('error',()=>{{document.body.innerHTML='<div style="color:#8e9bb3;font:14px Segoe UI;display:flex;height:100%;align-items:center;justify-content:center">视频加载失败</div>'}},true);
+        document.addEventListener('contextmenu',e=>e.preventDefault());
+        document.addEventListener('keydown',e=>{{e.preventDefault();e.stopPropagation();}},true);
+        </script></body></html>"""
+
+
+def build_work_view(data: dict) -> dict:
+    """Shape a ``__CX_WORK_PREVIEW__`` payload into plain data for QML."""
+    questions = []
+    for raw in data.get("questions") or []:
+        if not isinstance(raw, dict):
+            continue
+        q_type = str(raw.get("type", ""))
+        answer = str(raw.get("answer", "") or "")
+        options = []
+        if q_type == "judgement":
+            options = [
+                {"text": "正确", "selected": answer == "true"},
+                {"text": "错误", "selected": answer == "false"},
+            ]
+        elif q_type in ("single", "multiple"):
+            for line in str(raw.get("options", "") or "").splitlines():
+                line = line.strip()
+                if line:
+                    options.append({"text": line, "selected": bool(answer) and line[:1].upper() in answer.upper()})
+        questions.append({
+            "index": int(raw.get("index", len(questions) + 1) or 0),
+            "typeLabel": TYPE_LABELS.get(q_type, "简答题" if q_type else "题目"),
+            "title": str(raw.get("title", "")),
+            "options": options,
+            "answerText": answer if not options else "",
+            "fromBank": raw.get("source") == "cover",
+        })
+    return {
+        "title": str(data.get("title", "") or "章节检测"),
+        "coverRate": int(data.get("cover_rate", 0) or 0),
+        "submit": bool(data.get("submit", False)),
+        "questions": questions,
+    }
+
+
+def _config_property(key: str, type_, default, notify):
+    def getter(self):
+        return self._values.get(key, default)
+
+    def setter(self, value):
+        if self._values.get(key) != value:
+            self._values[key] = value
+            self._set_dirty(True)
+            self.configChanged.emit()
+
+    return Property(type_, getter, setter, notify=notify)
+
+
+class AppController(QObject):
+    configChanged = Signal()
+    dirtyChanged = Signal()
+    runStateChanged = Signal()
+    dashboardChanged = Signal()
+    videoChanged = Signal()
+    workChanged = Signal()
+    visualModeChanged = Signal()
+    themeChanged = Signal()
+    toast = Signal(str, str)  # message, kind
+    courseSelectionRequested = Signal("QVariantList")
+    promptRequested = Signal(str)
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self._settings = QSettings()
+        self._config = load_config()
+        self._values: dict = {}
+        self._dirty = False
+        self._process: QProcess | None = None
+        self._parser = OutputParser()
+        self._log_model = LogModel(parent=self)
+        self._task_model = TaskModel(parent=self)
+        self._status = "就绪"
+        self._status_kind = "idle"
+        self._started_at = 0.0
+        self._elapsed = 0
+        self._course = ""
+        self._chapter = ""
+        self._task = ""
+        self._completed = 0
+        self._video_html = video_message_html("等待视频任务开始")
+        self._video_title = ""
+        self._video_active = False
+        self._work: dict = {}
+        self._work_status = ""
+        self._visual_mode = "video"
+        self._theme = str(self._settings.value("ui/theme", "system"))
+        self._clock = QTimer(self)
+        self._clock.setInterval(1000)
+        self._clock.timeout.connect(self._tick)
+        self._read_values()
+        self._apply_theme()
+
+    # ----- configuration -------------------------------------------------
+    def _read_values(self) -> None:
+        common = self._config["common"]
+        try:
+            speed = f"{float(common.get('speed', '1')):g}"
+        except (TypeError, ValueError):
+            speed = "1"
+        try:
+            retry_interval = float(common.get("retry_interval", "1.0"))
+        except (TypeError, ValueError):
+            retry_interval = 1.0
+        action = common.get("notopen_action", "retry")
+        self._values = {
+            "username": common.get("username", ""),
+            "password": common.get("password", ""),
+            "course_list": common.get("course_list", ""),
+            "speed": speed if speed in SPEED_OPTIONS else "1",
+            "jobs": min(8, max(1, common.getint("jobs", fallback=4))),
+            "notopen_action": action if action in ("retry", "continue") else "retry",
+            "use_cookies": common.getboolean("use_cookies", fallback=False),
+            "retry_interval": max(0.0, retry_interval),
+            "add_learning_count": common.getboolean("add_learning_count", fallback=False),
+            "target_count": max(1, common.getint("target_count", fallback=100)),
+        }
+
+    def _set_dirty(self, value: bool) -> None:
+        if self._dirty != value:
+            self._dirty = value
+            self.dirtyChanged.emit()
+
+    username = _config_property("username", str, "", configChanged)
+    password = _config_property("password", str, "", configChanged)
+    courseList = _config_property("course_list", str, "", configChanged)
+    speed = _config_property("speed", str, "1", configChanged)
+    jobs = _config_property("jobs", int, 4, configChanged)
+    notopenAction = _config_property("notopen_action", str, "retry", configChanged)
+    useCookies = _config_property("use_cookies", bool, False, configChanged)
+    retryInterval = _config_property("retry_interval", float, 1.0, configChanged)
+    addLearningCount = _config_property("add_learning_count", bool, False, configChanged)
+    targetCount = _config_property("target_count", int, 100, configChanged)
+
+    dirty = Property(bool, lambda self: self._dirty, notify=dirtyChanged)
+    speedOptions = Property("QStringList", lambda self: SPEED_OPTIONS, constant=True)
+    version = Property(str, lambda self: APP_VERSION, constant=True)
+    appName = Property(str, lambda self: APP_NAME, constant=True)
+    dataDir = Property(str, lambda self: str(DATA_DIR), constant=True)
+    iconUrl = Property(QUrl, lambda self: QUrl.fromLocalFile(str(ROOT_DIR / "assets" / "learning_plus.png")), constant=True)
+
+    @Slot(result=bool)
+    def saveConfig(self) -> bool:
+        common = self._config["common"]
+        v = self._values
+        common["username"] = v["username"].strip()
+        common["password"] = v["password"]
+        common["course_list"] = v["course_list"].strip()
+        common["speed"] = v["speed"]
+        common["jobs"] = str(v["jobs"])
+        common["notopen_action"] = v["notopen_action"]
+        common["use_cookies"] = str(v["use_cookies"]).lower()
+        common["retry_interval"] = f"{v['retry_interval']:g}"
+        common["add_learning_count"] = str(v["add_learning_count"]).lower()
+        common["target_count"] = str(v["target_count"])
+        try:
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            with CONFIG_PATH.open("w", encoding="utf-8") as config_file:
+                self._config.write(config_file)
+        except OSError as exc:
+            self.toast.emit(f"保存失败：{exc}", "error")
+            return False
+        self._set_dirty(False)
+        self._log("INFO", f"配置已保存：{CONFIG_PATH}")
+        return True
+
+    @Slot()
+    def revertConfig(self) -> None:
+        self._config = load_config()
+        self._read_values()
+        self._set_dirty(False)
+        self.configChanged.emit()
+
+    @Slot()
+    def openDataDir(self) -> None:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(DATA_DIR)))
+
+    # ----- theme ---------------------------------------------------------
+    def _apply_theme(self) -> None:
+        hints = QGuiApplication.styleHints()
+        scheme = {
+            "light": Qt.ColorScheme.Light,
+            "dark": Qt.ColorScheme.Dark,
+        }.get(self._theme, Qt.ColorScheme.Unknown)
+        if hasattr(hints, "setColorScheme"):
+            hints.setColorScheme(scheme)
+
+    def _get_theme(self) -> str:
+        return self._theme
+
+    def _set_theme(self, value: str) -> None:
+        value = value if value in ("system", "light", "dark") else "system"
+        if value != self._theme:
+            self._theme = value
+            self._settings.setValue("ui/theme", value)
+            self._apply_theme()
+            self.themeChanged.emit()
+
+    themeMode = Property(str, _get_theme, _set_theme, notify=themeChanged)
+
+    # ----- first-run guide -------------------------------------------------
+    onboardingChanged = Signal()
+
+    def _onboarding_done(self) -> bool:
+        if os.environ.get("CHAOXING_DESKTOP_ONBOARDING") == "1":
+            return False
+        return str(self._settings.value("onboarding/done", "false")).lower() == "true"
+
+    onboardingDone = Property(bool, _onboarding_done, notify=onboardingChanged)
+
+    @Slot()
+    def finishOnboarding(self) -> None:
+        self._settings.setValue("onboarding/done", "true")
+        self._settings.setValue("onboarding/disclaimerVersion", APP_VERSION)
+        self.onboardingChanged.emit()
+
+    @Slot()
+    def resetOnboarding(self) -> None:
+        self._settings.setValue("onboarding/done", "false")
+        self.onboardingChanged.emit()
+
+    # ----- run state -----------------------------------------------------
+    running = Property(bool, lambda self: self._process is not None, notify=runStateChanged)
+    status = Property(str, lambda self: self._status, notify=runStateChanged)
+    statusKind = Property(str, lambda self: self._status_kind, notify=runStateChanged)
+    logModel = Property(QObject, lambda self: self._log_model, constant=True)
+    taskModel = Property(QObject, lambda self: self._task_model, constant=True)
+
+    currentCourse = Property(str, lambda self: self._course, notify=dashboardChanged)
+    currentChapter = Property(str, lambda self: self._chapter, notify=dashboardChanged)
+    currentTask = Property(str, lambda self: self._task, notify=dashboardChanged)
+    completedCount = Property(int, lambda self: self._completed, notify=dashboardChanged)
+
+    def _format_elapsed(self) -> str:
+        minutes, seconds = divmod(self._elapsed, 60)
+        hours, minutes = divmod(minutes, 60)
+        return f"{hours:d}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes:02d}:{seconds:02d}"
+
+    elapsed = Property(str, _format_elapsed, notify=dashboardChanged)
+
+    def _set_status(self, text: str, kind: str) -> None:
+        self._status = text
+        self._status_kind = kind
+        self.runStateChanged.emit()
+
+    def _tick(self) -> None:
+        self._elapsed = int(time.monotonic() - self._started_at)
+        self.dashboardChanged.emit()
+
+    def _log(self, level: str, message: str, stamp: str = "") -> None:
+        self._log_model.append(level, message, stamp or time.strftime("%H:%M:%S"))
+
+    def _worker_command(self) -> tuple[Path, list[str]] | None:
+        fake = os.environ.get("CHAOXING_DESKTOP_FAKE_WORKER")
+        if fake and not getattr(sys, "frozen", False):
+            return Path(sys.executable), [fake, "--worker", str(CONFIG_PATH), str(DATA_DIR)]
+        if getattr(sys, "frozen", False):
+            program = BUNDLE_DIR / "chaoxing-worker.exe"
+            if not program.exists():
+                self.toast.emit(f"找不到任务运行组件：{program}", "error")
+                return None
+            return program, ["--worker", str(CONFIG_PATH), str(DATA_DIR)]
+        return Path(sys.executable), [str(BUNDLE_DIR / "worker.py"), "--worker", str(CONFIG_PATH), str(DATA_DIR)]
+
+    @Slot()
+    def startRun(self) -> None:
+        if self._process is not None:
+            return
+        v = self._values
+        if not v["use_cookies"] and (not v["username"].strip() or not v["password"]):
+            self.toast.emit("请在设置中填写账号和密码，或开启 cookies 登录。", "warning")
+            return
+        if not self.saveConfig():
+            return
+        command = self._worker_command()
+        if command is None:
+            return
+        program, arguments = command
+
+        process = QProcess(self)
+        process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        process.readyReadStandardOutput.connect(self._read_output)
+        process.finished.connect(self._on_finished)
+        process.errorOccurred.connect(self._on_error)
+        process.setWorkingDirectory(str(DATA_DIR))
+        environment = QProcessEnvironment.systemEnvironment()
+        environment.insert("PYTHONUTF8", "1")
+        environment.insert("PYTHONUNBUFFERED", "1")
+        environment.insert("CHAOXING_DESKTOP_PREVIEW", "1")
+        process.setProcessEnvironment(environment)
+        process.start(str(program), arguments)
+        if not process.waitForStarted(2500):
+            self.toast.emit(f"启动失败：{process.errorString()}", "error")
+            process.deleteLater()
+            return
+
+        self._process = process
+        self._parser = OutputParser()
+        self._task_model.clear()
+        self._course = self._chapter = self._task = ""
+        self._completed = 0
+        self._started_at = time.monotonic()
+        self._elapsed = 0
+        self._clock.start()
+        self._work = {}
+        self._work_status = ""
+        self.workChanged.emit()
+        self._set_video(video_message_html("等待视频任务开始"), "", False)
+        self.dashboardChanged.emit()
+        self._set_status("正在运行", "running")
+        self._log("INFO", "任务进程已启动。")
+
+    @Slot()
+    def stopRun(self) -> None:
+        if self._process is None:
+            return
+        self._process.terminate()
+        QTimer.singleShot(1800, self._kill_if_running)
+        self._log("WARNING", "已发送停止请求。")
+
+    def _kill_if_running(self) -> None:
+        if self._process and self._process.state() != QProcess.ProcessState.NotRunning:
+            self._process.kill()
+
+    @Slot()
+    def shutdown(self) -> None:
+        if self._process and self._process.state() != QProcess.ProcessState.NotRunning:
+            self._process.kill()
+            self._process.waitForFinished(1500)
+
+    def _write_stdin(self, text: str) -> None:
+        if self._process is not None:
+            self._process.write((text + "\n").encode("utf-8"))
+
+    @Slot("QVariantList")
+    def submitCourses(self, course_ids) -> None:
+        ids = [str(i) for i in course_ids if str(i)]
+        self._write_stdin(",".join(ids))
+        self._log("INFO", f"已选择课程：{', '.join(ids) if ids else '全部课程'}")
+
+    @Slot(bool)
+    def answerPrompt(self, yes: bool) -> None:
+        self._write_stdin("y" if yes else "n")
+
+    def _read_output(self, final: bool = False) -> None:
+        if self._process is None:
+            return
+        chunk = bytes(self._process.readAllStandardOutput()).decode("utf-8", errors="replace")
+        for event in self._parser.feed(chunk, final=final):
+            self._handle_event(event)
+
+    def _handle_event(self, event) -> None:
+        if isinstance(event, LogEvent):
+            self._log(event.level, event.message, event.time)
+        elif isinstance(event, ActivityEvent):
+            if event.kind == "course":
+                self._course = event.value
+            elif event.kind == "chapter":
+                self._chapter = event.value
+            elif event.kind == "task_started":
+                self._task = event.value
+                self._task_model.upsert(event.value, detail="进行中")
+            elif event.kind == "task_finished":
+                self._completed += 1
+                self._task_model.upsert(event.value, detail="已完成", done=True)
+            self.dashboardChanged.emit()
+        elif isinstance(event, ProgressEvent):
+            self._task_model.upsert(event.name, percent=event.percent, detail=f"{event.done} / {event.total}")
+        elif isinstance(event, VideoPreviewEvent):
+            if not event.valid:
+                self._set_video(video_message_html("无法读取当前视频预览"), "", False)
+            elif event.source:
+                self._set_video(video_source_html(event.source), event.title, True)
+            else:
+                self._set_video(video_message_html("当前章节没有可显示的视频流"), event.title, False)
+            self._set_visual_mode("video")
+        elif isinstance(event, WorkPreviewEvent):
+            self._handle_work(event)
+        elif isinstance(event, CourseListEvent):
+            self.courseSelectionRequested.emit(event.courses)
+        elif isinstance(event, PromptEvent):
+            self.promptRequested.emit(event.text)
+
+    def _handle_work(self, event: WorkPreviewEvent) -> None:
+        if not event.valid:
+            return
+        if event.phase == "filled":
+            self._work = build_work_view(event.data)
+            self._work_status = "正在提交" if self._work["submit"] else "仅保存，不提交"
+            self._set_visual_mode("work")
+        elif event.phase in ("submitted", "saved"):
+            self._work_status = "已提交" if event.phase == "submitted" else "已保存"
+            self._completed += 1
+            self.dashboardChanged.emit()
+        elif event.phase == "failed":
+            self._work_status = f"提交失败：{event.data.get('msg', '')}"
+        self.workChanged.emit()
+
+    def _on_finished(self, exit_code: int, _status) -> None:
+        self._read_output(final=True)
+        self._clock.stop()
+        self._task_model.finish_running()
+        ok = exit_code == 0
+        self._log("INFO" if ok else "ERROR", f"任务进程结束，退出码：{exit_code}")
+        if self._process is not None:
+            self._process.deleteLater()
+        self._process = None
+        self._set_status("已完成" if ok else "已退出", "done" if ok else "error")
+        self._set_video(video_message_html("视频任务已结束", "下次运行时会继续显示当前视频"), "", False)
+
+    def _on_error(self, error) -> None:
+        if self._process and error != QProcess.ProcessError.Crashed:
+            self._log("ERROR", f"任务进程错误：{self._process.errorString()}")
+
+    # ----- visual panel --------------------------------------------------
+    def _set_video(self, markup: str, title: str, active: bool) -> None:
+        self._video_html = markup
+        self._video_title = title
+        self._video_active = active
+        self.videoChanged.emit()
+
+    videoHtml = Property(str, lambda self: self._video_html, notify=videoChanged)
+    videoTitle = Property(str, lambda self: self._video_title, notify=videoChanged)
+    videoActive = Property(bool, lambda self: self._video_active, notify=videoChanged)
+    videoBaseUrl = Property(str, lambda self: VIDEO_BASE_URL, constant=True)
+    work = Property("QVariantMap", lambda self: self._work, notify=workChanged)
+    workStatus = Property(str, lambda self: self._work_status, notify=workChanged)
+
+    def _set_visual_mode(self, mode: str) -> None:
+        if mode != self._visual_mode:
+            self._visual_mode = mode
+            self.visualModeChanged.emit()
+
+    def _get_visual_mode(self) -> str:
+        return self._visual_mode
+
+    visualMode = Property(str, _get_visual_mode, _set_visual_mode, notify=visualModeChanged)

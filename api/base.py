@@ -35,6 +35,34 @@ from api.decode import (
 )
 
 
+def _emit_work_preview(payload: dict) -> None:
+    """桌面版只读答题预览: 仅向标准输出写一行事件, 任何异常都不影响答题流程。"""
+    if os.environ.get("CHAOXING_DESKTOP_PREVIEW") != "1":
+        return
+    try:
+        print("__CX_WORK_PREVIEW__" + json.dumps(payload, ensure_ascii=False, default=str), flush=True)
+    except Exception:
+        pass
+
+
+def _work_preview_questions(question_list) -> list[dict]:
+    items = []
+    try:
+        for index, q in enumerate(question_list, 1):
+            qid = q.get("id", "")
+            items.append({
+                "index": index,
+                "type": q.get("type", ""),
+                "title": q.get("title", ""),
+                "options": q.get("options", ""),
+                "answer": (q.get("answerField") or {}).get(f"answer{qid}", ""),
+                "source": q.get(f"answerSource{qid}", ""),
+            })
+    except Exception:
+        pass
+    return items
+
+
 def get_timestamp():
     return str(int(time.time() * 1000))
 
@@ -1298,6 +1326,14 @@ class Chaoxing:
                         }
                     )
 
+            _emit_work_preview({
+                "phase": "filled",
+                "title": _job.get("name") or _job.get("jobid", ""),
+                "cover_rate": round(cover_rate),
+                "submit": questions["pyFlag"] == "",
+                "questions": _work_preview_questions(questions["questions"]),
+            })
+
             del questions["questions"]
 
             # 4. 提交
@@ -1324,11 +1360,15 @@ class Chaoxing:
                 res_json = res.json()
                 if res_json["status"]:
                     logger.info(f'{"提交" if questions["pyFlag"] == "" else "保存"}答题成功 -> {res_json["msg"]}')
+                    _emit_work_preview({"phase": "submitted" if questions["pyFlag"] == "" else "saved",
+                                        "msg": res_json["msg"]})
                 else:
                     logger.error(f'{"提交" if questions["pyFlag"] == "" else "保存"}答题失败 -> {res_json["msg"]}')
+                    _emit_work_preview({"phase": "failed", "msg": res_json["msg"]})
                     return StudyResult.ERROR
             else:
                 logger.error(f'{"提交" if questions["pyFlag"] == "" else "保存"}答题失败 -> {res.text}')
+                _emit_work_preview({"phase": "failed", "msg": f"HTTP {res.status_code}"})
                 return StudyResult.ERROR
 
             # 5. 若只是保存未提交，无法判断成绩，保持原有行为

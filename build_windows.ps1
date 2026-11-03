@@ -65,12 +65,14 @@ Remove-Item -LiteralPath $guiWork -Recurse -Force -ErrorAction SilentlyContinue
     --name 学习通PLUS `
     --icon "$projectRoot\assets\learning_plus.ico" `
     --add-data "$projectRoot\config_template.ini;." `
-    --add-data "$projectRoot\preview.qml;." `
+    --add-data "$projectRoot\ui\qml;ui\qml" `
     --add-data "$projectRoot\assets\learning_plus.png;assets" `
     --add-data "$pythonRoot\Lib\site-packages\PySide6\qml;PySide6\qml" `
     --add-binary "$pythonRoot\Lib\site-packages\PySide6\plugins\webview\qtwebview_webview2.dll;PySide6\plugins\webview" `
+    --hidden-import PySide6.QtQml `
+    --hidden-import PySide6.QtQuick `
+    --hidden-import PySide6.QtQuickControls2 `
     --hidden-import PySide6.QtWebView `
-    --hidden-import PySide6.QtQuickWidgets `
     --distpath $distRoot --workpath $guiWork `
     (Join-Path $projectRoot "gui.py")
 if ($LASTEXITCODE -ne 0) { throw "GUI executable build failed." }
@@ -85,6 +87,28 @@ Copy-Item -LiteralPath (Join-Path $projectRoot "assets\learning_plus.png") -Dest
 Copy-Item -LiteralPath (Join-Path $projectRoot "assets\chaoxing_official.jpg") -Destination $releaseAssets -Force
 $releaseZip = Join-Path $projectRoot "dist\学习通PLUS-Windows.zip"
 Compress-Archive -LiteralPath $releaseDir -DestinationPath $releaseZip -CompressionLevel Optimal -Force
+
+# Installer (Inno Setup 6). Skipped with a note when ISCC.exe is not installed.
+$isccCandidates = @(
+    (Get-Command iscc -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1),
+    (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe"),
+    (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"),
+    (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe")
+) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
+$iscc = $isccCandidates | Select-Object -First 1
+$versionMatch = Select-String -LiteralPath (Join-Path $projectRoot "ui\controller.py") -Pattern '^APP_VERSION = "([^"]+)"' | Select-Object -First 1
+$appVersion = if ($versionMatch) { $versionMatch.Matches[0].Groups[1].Value } else { "0.0.0" }
+$installer = $null
+if ($iscc) {
+    Get-ChildItem -LiteralPath $distRoot -Filter "学习通PLUS-Setup-*.exe" -ErrorAction SilentlyContinue | Remove-Item -Force
+    & $iscc /Q "/DAppVersion=$appVersion" "/DSourceDir=$releaseDir" (Join-Path $projectRoot "installer\学习通PLUS.iss")
+    if ($LASTEXITCODE -ne 0) { throw "Installer build failed." }
+    $installer = Join-Path $distRoot "学习通PLUS-Setup-$appVersion.exe"
+} else {
+    Write-Host "Inno Setup 6 not found; skipping installer. Install it with: winget install JRSoftware.InnoSetup --scope user"
+}
+
 Write-Host "Build complete: $(Join-Path $releaseDir '学习通PLUS.exe')"
 Write-Host "Worker component: $(Join-Path $releaseDir 'chaoxing-worker.exe')"
 Write-Host "Release archive: $releaseZip"
+if ($installer) { Write-Host "Installer: $installer" }

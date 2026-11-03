@@ -4,26 +4,46 @@
 
 - 产品名：学习通PLUS，Windows 桌面应用。
 - 当前目标平台只有超星学习通。后续开发保持单平台，不加入其他网课平台入口。
-- 保留现代化界面、课程运行选项和独立的只读视频预览窗。预览窗静音、不可操作。
+- 界面为 Qt Quick（QML）+ FluentWinUI3 样式，跟随系统浅色/深色，也可在设置里固定。
+- 首页左栏是仪表盘和基本参数，右栏是只读可视化面板（视频 / 答题）。可视化面板静音、不可操作。
 - Windows 用户数据路径 `%APPDATA%\ChaoxingDesktop` 是为兼容已有配置而保留的，修改前先确认迁移影响。
 
 ## 代码结构
 
-- `gui.py`：PySide6 主界面、配置表单、任务进程管理和日志显示。
+- `gui.py`：入口，创建 QGuiApplication 和 QML 引擎，设置 FluentWinUI3 样式，交给 `ui/startup.py`。
+- `ui/startup.py`：`StartupLoader`。先显示 `Splash.qml`，再在后台依次读取配置、检查运行组件、异步编译 `Main.qml`、异步创建主窗口，并把进度报告给启动画面。启动画面要等打字动画结束且加载完成才关闭，然后显示主窗口。
+- `ui/qml/Onboarding.qml`：首次启动引导（欢迎 > 免责声明 > 账号 > 开始使用）。完成状态存在 QSettings 的 `onboarding/done`；设置页“关于”里可以重新打开。开发时设置 `CHAOXING_DESKTOP_ONBOARDING=1` 可强制显示。
+- `installer/学习通PLUS.iss`：Inno Setup 安装器脚本，默认按当前用户安装（不需要管理员），卸载时保留 `%APPDATA%\ChaoxingDesktop`。`ChineseSimplified.isl` 来自 Inno Setup 官方仓库的非官方语言文件。
+- `ui/controller.py`：`AppController`，暴露给 QML 的 `controller`。负责 `config.ini` 读写、启动/停止 worker、写 worker 标准输入（课程选择、Y/n 确认）、主题和预览数据。
+- `ui/output_parser.py`：把 worker 输出解析成事件（loguru 日志、tqdm 进度、课程列表、输入提示、预览事件）。纯 Python，无 Qt 依赖。
+- `ui/models.py`：日志模型（级别过滤、1200 行上限）和任务进度模型。
+- `ui/qml/`：界面。`Main.qml` 是窗口和导航，`DashboardPage.qml` / `SettingsPage.qml` 是两个页面，`Theme.qml` 是颜色 token 单例（由 `qmldir` 注册），其余是组件。
 - `worker.py`：桌面版子进程入口，负责切换到用户数据目录后调用 `main.py`。
 - `main.py`：原命令行任务入口；桌面子进程通过它运行现有任务处理逻辑。
-- `api/base.py`：学习通课程与任务处理，包括视频状态读取和进度上报。
-- `preview.qml`：嵌入式 Qt WebView。只渲染传入的预览页面。
+- `api/base.py`：学习通课程与任务处理，包括视频状态读取、进度上报和答题。
 - `build_windows.ps1`：准备便携 Python、安装依赖、分别构建 worker 和 GUI，并生成发行 zip。
 - `README_DESKTOP.md`：桌面版安装和使用说明。
 - `assets/chaoxing_official.jpg`：学习通官方 App Store 图标原图。
 - `assets/render_icon.py`：在原图左上方加 PLUS 字样，生成程序窗口用 PNG 和 exe 用 ICO。
 
-## 视频预览数据流
+## 预览数据流
 
-GUI 启动 worker 时设置 `CHAOXING_DESKTOP_PREVIEW=1`。`api/base.py` 获取视频状态后，通过标准输出发送 `__CX_VIDEO_PREVIEW__` JSON 行；`gui.py` 解析后把地址传给 QML WebView。预览窗口不记录 URL 到普通日志。Windows 构建使用 Qt WebView 的 native/WebView2 后端，运行机器需要 WebView2 Runtime。
+GUI 启动 worker 时设置 `CHAOXING_DESKTOP_PREVIEW=1`（以及 `PYTHONUNBUFFERED=1`）。`api/base.py` 通过标准输出发送两种事件行，`ui/output_parser.py` 解析，不会进入普通日志：
 
-预览地址必须来自学习通视频状态响应并通过现有域名检查。真实课程画面尚未用用户账号验证，若调整该流程，需要分别检查无可用地址、加载失败和任务结束时的窗口状态。
+- `__CX_VIDEO_PREVIEW__{"source","title"}`：获取视频状态后发送。`ui/controller.py` 生成静音、无控件的 HTML，交给 `VideoView.qml` 里的 WebView。Windows 构建使用 Qt WebView 的 native/WebView2 后端，运行机器需要 WebView2 Runtime。WebView2 后端不支持 `loadHtml` 的 base URL（页面按 `about:blank` 处理）。
+- `__CX_WORK_PREVIEW__{...}`：`study_work` 填好答案、提交前发送 `phase=filled`（题目、选项、所填答案、来源、覆盖率），提交后发送 `submitted` / `saved` / `failed`。由 `_emit_work_preview` 输出，异常全部吞掉，不影响答题流程。`WorkView.qml` 用 QML 原生绘制，不加载学习通网页。
+
+视频预览地址必须来自学习通视频状态响应并通过现有域名检查。真实课程画面尚未用用户账号验证，若调整该流程，需要分别检查无可用地址、加载失败和任务结束时的面板状态。
+
+原生 WebView 会盖住 QML 弹层，所以对话框打开时 `VideoView` 会被暂停显示（`suspended`）。
+
+## worker 标准输入
+
+`main.py` 会在两处调用 `input()`：课程 ID 为空时选择课程、大模型连接检查失败时 Y/n 确认。GUI 识别这两种提示后弹出对话框，再把答案写入 worker 标准输入。新增 `input()` 调用时要同步更新 `ui/output_parser.py`，否则任务会卡住。
+
+## 界面开发测试
+
+非打包模式下，环境变量 `CHAOXING_DESKTOP_FAKE_WORKER=<脚本路径>` 会让 GUI 用指定脚本代替 `worker.py`，便于不登录就测试界面。设置 `APPDATA` 到临时目录可避免改动真实配置。
 
 ## 构建
 
@@ -33,7 +53,7 @@ GUI 启动 worker 时设置 `CHAOXING_DESKTOP_PREVIEW=1`。`api/base.py` 获取�
 pwsh -NoProfile -ExecutionPolicy Bypass -File .\build_windows.ps1
 ```
 
-构建会联网准备便携 Python 和 Python 依赖。结果位于 `dist\学习通PLUS`，压缩包为 `dist\学习通PLUS-Windows.zip`。发行目录中的 `学习通PLUS.exe`、`chaoxing-worker.exe` 和 `_internal` 必须一起保留。
+构建会联网准备便携 Python 和 Python 依赖。结果位于 `dist\学习通PLUS`，压缩包为 `dist\学习通PLUS-Windows.zip`。如果装了 Inno Setup 6（`winget install JRSoftware.InnoSetup --scope user`），还会生成安装器 `dist\学习通PLUS-Setup-<版本>.exe`，版本号取自 `ui/controller.py` 的 `APP_VERSION`；没装则跳过这一步。发行目录中的 `学习通PLUS.exe`、`chaoxing-worker.exe` 和 `_internal` 必须一起保留。
 
 依赖清单：`requirements-desktop.txt`、`requirements-build.txt`。现有自动化测试位于 `tests/`。
 
@@ -41,6 +61,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\build_windows.ps1
 
 - 不要把真实账号、密码、cookies、个人 `config.ini` 或运行日志加入版本控制或交接包。
 - 配置模板是 `config_template.ini`；用户配置在 `%APPDATA%\ChaoxingDesktop\config.ini`。
-- UI 与 worker 通过进程标准输出通信，新增日志或事件时避免破坏 `__CX_VIDEO_PREVIEW__` 消息解析。
-- 修改打包相关内容时，检查 QML 资源、Qt WebView 插件、图标资源和 worker 是否都进入发行目录。
+- UI 与 worker 通过进程标准输出通信，新增日志或事件时避免破坏 `__CX_VIDEO_PREVIEW__` / `__CX_WORK_PREVIEW__` 消息解析；解析规则的测试在 `tests/test_output_parser.py`。
+- 修改打包相关内容时，检查 `ui/qml` 资源、Qt WebView 插件、图标资源和 worker 是否都进入发行目录。
+- 界面偏好（主题、窗口尺寸）保存在 QSettings，不写入 `config.ini`。
 - 变更 API、配置兼容或任务流程前，先保留现有配置键和学习通运行行为；做完变更后运行相关测试并构建桌面包。
