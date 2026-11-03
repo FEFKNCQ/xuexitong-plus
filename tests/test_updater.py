@@ -22,10 +22,12 @@ class VersionTestCase(unittest.TestCase):
 
     def test_pick_asset(self):
         release = {"assets": [
-            {"name": "学习通PLUS-Windows.zip"},
-            {"name": "学习通PLUS-Setup-1.1.0.exe", "browser_download_url": "x"},
+            {"name": "XueXiTong-Plus-Windows-1.1.0.zip"},
+            {"name": "XueXiTong-Plus-Setup-1.1.0.exe", "browser_download_url": "x"},
         ]}
-        self.assertEqual(upd.pick_asset(release)["name"], "学习通PLUS-Setup-1.1.0.exe")
+        self.assertEqual(upd.pick_asset(release)["name"], "XueXiTong-Plus-Setup-1.1.0.exe")
+        # What GitHub turns a Chinese-named asset into.
+        self.assertEqual(upd.pick_asset({"assets": [{"name": "PLUS-Setup-1.0.0.exe"}]})["name"], "PLUS-Setup-1.0.0.exe")
         self.assertIsNone(upd.pick_asset({"assets": [{"name": "other.exe"}]}))
 
 
@@ -37,7 +39,7 @@ class ReleaseHandlingTestCase(unittest.TestCase):
         seen = []
         self.u.updateAvailable.connect(lambda: seen.append(True))
         self.u._on_release({"tag_name": "v1.1.0", "body": "notes",
-                            "assets": [{"name": "学习通PLUS-Setup-1.1.0.exe", "size": 10, "browser_download_url": "x"}]})
+                            "assets": [{"name": "XueXiTong-Plus-Setup-1.1.0.exe", "size": 10, "browser_download_url": "x"}]})
         self.assertEqual(self.u.state, "available")
         self.assertEqual(self.u.latestVersion, "1.1.0")
         self.assertEqual(seen, [True])
@@ -63,7 +65,7 @@ class DownloadTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             src = Path(tmp) / "src.bin"
             src.write_bytes(payload)
-            w = upd._DownloadWorker(src.as_uri(), "学习通PLUS-Setup-test.exe", len(payload), digest)
+            w = upd._DownloadWorker(src.as_uri(), "XueXiTong-Plus-Setup-test.exe", len(payload), digest)
             out = {}
             w.done.connect(lambda p: out.setdefault("done", p))
             w.failed.connect(lambda m: out.setdefault("failed", m))

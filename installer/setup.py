@@ -3,7 +3,7 @@
 
 The release zip is appended to the end of the built setup exe; ``zipfile`` finds its
 central directory from the file's end, so the exe can be opened as the archive
-directly. For development pass ``--payload path\\to\\学习通PLUS-Windows.zip``.
+directly. For development pass ``--payload path\\to\\XueXiTong-Plus-Windows-<ver>.zip``.
 """
 
 from __future__ import annotations

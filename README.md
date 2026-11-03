@@ -60,13 +60,13 @@
 
 ### 1. 安装
 
-1. 在 [Releases](../../releases) 下载 `学习通PLUS-Setup-<版本>.exe`。
+1. 在 [Releases](../../releases) 下载 `XueXiTong-Plus-Setup-<版本>.exe`。
 2. 双击运行，按向导完成安装：接受许可协议 → 选择安装位置和快捷方式 → 安装。
    - 默认安装到 `%LOCALAPPDATA%\Programs\学习通PLUS`，不需要管理员权限。
    - 已安装旧版本时再次运行会直接升级，配置不受影响。
 3. 视频预览需要 Microsoft Edge WebView2 运行时（Windows 11 已自带）。
 
-也可以下载 `学习通PLUS-Windows.zip` 免安装使用：解压后运行 `学习通PLUS.exe`，保持 `chaoxing-worker.exe` 和 `_internal` 文件夹在同一目录。
+也可以下载 `XueXiTong-Plus-Windows-<版本>.zip` 免安装使用：解压后运行 `学习通PLUS.exe`，保持 `chaoxing-worker.exe` 和 `_internal` 文件夹在同一目录。
 
 ### 2. 首次启动
 
@@ -105,8 +105,8 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File .\build_windows.ps1
 脚本会准备便携 Python 和依赖，生成：
 
 - `dist\学习通PLUS\`：免安装程序目录
-- `dist\学习通PLUS-Windows.zip`：免安装压缩包
-- `dist\学习通PLUS-Setup-<版本>.exe`：安装程序
+- `dist\XueXiTong-Plus-Windows-<版本>.zip`：免安装压缩包
+- `dist\XueXiTong-Plus-Setup-<版本>.exe`：安装程序
 
 开发者说明见 [CLAUDE.md](CLAUDE.md)，命令行用法见 [docs/CLI.md](docs/CLI.md)。
 

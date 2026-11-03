@@ -4,9 +4,9 @@
 
 ## 安装
 
-- **安装包（推荐）**：运行 `学习通PLUS-Setup-<版本>.exe`，按向导选择安装位置和快捷方式。默认安装到当前用户（`%LOCALAPPDATA%\Programs\学习通PLUS`），不需要管理员权限。已安装时再次运行会升级，配置不受影响。
+- **安装包（推荐）**：运行 `XueXiTong-Plus-Setup-<版本>.exe`，按向导选择安装位置和快捷方式。默认安装到当前用户（`%LOCALAPPDATA%\Programs\学习通PLUS`），不需要管理员权限。已安装时再次运行会升级，配置不受影响。
 - **卸载**：在 Windows“设置 → 应用”里卸载 学习通PLUS，或运行安装目录里的 `学习通PLUS.exe --uninstall`。可以选择是否同时删除配置、cookies 和日志，默认保留。
-- **免安装**：解压 `学习通PLUS-Windows.zip` 的全部内容，双击 `学习通PLUS.exe`。请保持同目录中的 `chaoxing-worker.exe` 和 `_internal` 文件夹完整。
+- **免安装**：解压 `XueXiTong-Plus-Windows-<版本>.zip` 的全部内容，双击 `学习通PLUS.exe`。请保持同目录中的 `chaoxing-worker.exe` 和 `_internal` 文件夹完整。
 
 ## 使用
 
@@ -42,6 +42,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build_windows.ps1
 
 图标以[学习通官方 App Store 图标](https://apps.apple.com/cn/app/%E5%AD%A6%E4%B9%A0%E9%80%9A/id977946724)为底图，并在左上角添加 PLUS 标识。发行包附带 ICO、PNG 和官方原图。
 
-脚本会在 `.build` 中准备便携 Python 和依赖，构建结果位于 `dist\学习通PLUS`，发行压缩包为 `dist\学习通PLUS-Windows.zip`。同时会生成安装包 `dist\学习通PLUS-Setup-<版本>.exe`。
+脚本会在 `.build` 中准备便携 Python 和依赖，构建结果位于 `dist\学习通PLUS`，发行压缩包为 `dist\XueXiTong-Plus-Windows-<版本>.zip`。同时会生成安装包 `dist\XueXiTong-Plus-Setup-<版本>.exe`。
 
 本程序基于开源项目 [Samueli924/chaoxing](https://github.com/Samueli924/chaoxing)，遵循 GPL-3.0 协议，禁止用于盈利。

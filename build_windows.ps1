@@ -41,8 +41,8 @@ if ($LASTEXITCODE -ne 0) { throw "Application icon generation failed." }
 $distRoot = Join-Path $projectRoot "dist"
 $workRoot = Join-Path $buildRoot "pyinstaller"
 New-Item -ItemType Directory -Path $distRoot -Force | Out-Null
-foreach ($old in @("Chaoxing", "Chaoxing-Windows", "学习通PLUS", "chaoxing-worker.exe", "Chaoxing-Windows.zip", "学习通PLUS-Windows.zip")) {
-    Remove-Item -LiteralPath (Join-Path $distRoot $old) -Recurse -Force -ErrorAction SilentlyContinue
+foreach ($old in @("Chaoxing", "Chaoxing-Windows", "学习通PLUS", "chaoxing-worker.exe", "Chaoxing-Windows.zip", "学习通PLUS-Windows.zip", "学习通PLUS-Setup-*.exe", "XueXiTong-Plus-*")) {
+    Remove-Item -Path (Join-Path $distRoot $old) -Recurse -Force -ErrorAction SilentlyContinue  # -Path: entries may be wildcards
 }
 Remove-Item -LiteralPath $workRoot -Recurse -Force -ErrorAction SilentlyContinue
 
@@ -64,21 +64,22 @@ Copy-Item -LiteralPath (Join-Path $projectRoot "LICENSE") -Destination (Join-Pat
 # their deep paths can exceed MAX_PATH when installed, so drop them from the release.
 Get-ChildItem -LiteralPath (Join-Path $releaseDir "_internal") -Directory -Recurse -Filter "objects-*" -ErrorAction SilentlyContinue |
     Remove-Item -Recurse -Force
-$releaseZip = Join-Path $projectRoot "dist\学习通PLUS-Windows.zip"
+# Release file names are ASCII: GitHub strips non-ASCII characters from release asset names.
+$versionMatch = Select-String -LiteralPath (Join-Path $projectRoot "ui\controller.py") -Pattern '^APP_VERSION = "([^"]+)"' | Select-Object -First 1
+$appVersion = if ($versionMatch) { $versionMatch.Matches[0].Groups[1].Value } else { "0.0.0" }
+$releaseZip = Join-Path $distRoot "XueXiTong-Plus-Windows-$appVersion.zip"
 Compress-Archive -LiteralPath $releaseDir -DestinationPath $releaseZip -CompressionLevel Optimal -Force
 
 # Installer: our own Qt Quick setup program (installer\setup.py) with the release zip
 # appended to the end of the exe. zipfile finds the archive from the file's end.
-$versionMatch = Select-String -LiteralPath (Join-Path $projectRoot "ui\controller.py") -Pattern '^APP_VERSION = "([^"]+)"' | Select-Object -First 1
-$appVersion = if ($versionMatch) { $versionMatch.Matches[0].Groups[1].Value } else { "0.0.0" }
 $setupWork = Join-Path $buildRoot "pyinstaller-setup"
 $setupDist = Join-Path $buildRoot "setup-dist"
 Remove-Item -LiteralPath $setupWork, $setupDist -Recurse -Force -ErrorAction SilentlyContinue
 & $pythonExe -m PyInstaller --noconfirm --clean --distpath $setupDist --workpath $setupWork `
     (Join-Path $projectRoot "packaging\setup.spec")
 if ($LASTEXITCODE -ne 0) { throw "Setup program build failed." }
-Get-ChildItem -LiteralPath $distRoot -Filter "学习通PLUS-Setup-*.exe" -ErrorAction SilentlyContinue | Remove-Item -Force
-$installer = Join-Path $distRoot "学习通PLUS-Setup-$appVersion.exe"
+Get-ChildItem -LiteralPath $distRoot -Filter "XueXiTong-Plus-Setup-*.exe" -ErrorAction SilentlyContinue | Remove-Item -Force
+$installer = Join-Path $distRoot "XueXiTong-Plus-Setup-$appVersion.exe"
 $out = [IO.File]::Open($installer, [IO.FileMode]::Create)
 try {
     foreach ($part in @((Join-Path $setupDist "setup-stub.exe"), $releaseZip)) {

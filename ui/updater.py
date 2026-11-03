@@ -2,7 +2,7 @@
 """Online update: check the latest GitHub Release, download the setup exe, run it.
 
 The setup program upgrades an existing install in place, so "update" is simply:
-download 学习通PLUS-Setup-<ver>.exe, verify it, start it, quit this app.
+download the release's setup exe, verify it, start it, quit this app.
 """
 
 from __future__ import annotations
@@ -21,7 +21,9 @@ from PySide6.QtCore import Property, QObject, QSettings, QThread, QTimer, Signal
 REPO = "Kerxs/XueXiTong-Plus"
 LATEST_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 RELEASES_PAGE = f"https://github.com/{REPO}/releases"
-ASSET_RE = re.compile(r"^学习通PLUS-Setup-.*\.exe$")
+# Any "...Setup...exe" asset. GitHub strips non-ASCII from asset names, so this must not
+# depend on the Chinese product name (releases use XueXiTong-Plus-Setup-<ver>.exe).
+ASSET_RE = re.compile(r"(?i)^[\w.\-]*setup[\w.\-]*\.exe$")
 TIMEOUT = 15
 
 
