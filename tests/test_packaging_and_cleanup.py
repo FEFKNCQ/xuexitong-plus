@@ -28,7 +28,11 @@ class PruneRulesTestCase(unittest.TestCase):
             "PySide6/qml/QtQuick/Controls/impl/qmldir",
             "PySide6/qml/QtQuick/Layouts/qmldir", "PySide6/qml/QtCore/qmldir", "PySide6/qml/QtWebView/qmldir",
             "PySide6/plugins/platforms/qwindows.dll", "PySide6/plugins/webview/qtwebview_webview2.dll",
-            "ddddocr/common_old.onnx", "cv2/cv2.pyd", "resource/font_map_table.json",
+            "ddddocr/common_old.onnx", "resource/font_map_table.json",
+            "PySide6/Qt6QmlMeta.dll", "PySide6/Qt6QmlCore.dll", "PySide6/Qt6QmlNetwork.dll",
+            "PySide6/plugins/imageformats/qico.dll", "PySide6/plugins/imageformats/qjpeg.dll",
+            "PySide6/plugins/imageformats/qsvg.dll", "PySide6/plugins/iconengines/qsvgicon.dll",
+            "PySide6/plugins/tls/qschannelbackend.dll", "PySide6/plugins/styles/qmodernwindowsstyle.dll",
         ]
         for name in keep:
             self.assertFalse(is_unused(name), name)
@@ -42,6 +46,12 @@ class PruneRulesTestCase(unittest.TestCase):
             "PySide6/qml/Qt/labs/settings/qmldir", "PySide6/qml/QtQuick/Dialogs/qmldir",
             "PySide6/qml/QtQml/objects-Debug/x.cpp.obj", "PySide6/plugins/qmltooling/q.dll",
             "ddddocr/common.onnx", "ddddocr/common_det.onnx", "cv2/opencv_videoio_ffmpeg500_64.dll",
+            "cv2/cv2.pyd", "PySide6/Qt6QuickTest.dll", "PySide6/Qt6QuickVectorImageGenerator.dll",
+            "PySide6/Qt6QmlXmlListModel.dll", "PySide6/Qt6QuickNativeStyle.dll",
+            "PySide6/qml/Qt5Compat/GraphicalEffects/qmldir", "PySide6/qml/QtQml/XmlListModel/qmldir",
+            "PySide6/plugins/platforms/qdirect2d.dll", "PySide6/plugins/platforms/qoffscreen.dll",
+            "PySide6/plugins/imageformats/qtiff.dll", "PySide6/plugins/imageformats/qwebp.dll",
+            "PySide6/plugins/platforminputcontexts/qtvirtualkeyboardplugin.dll",
         ]
         for name in drop:
             self.assertTrue(is_unused(name), name)

@@ -18,6 +18,9 @@ _UNUSED_QT = (
     "quickcontrols2material", "quickcontrols2universal", "quickcontrols2imagine",
     "quickcontrols2windowsstyleimpl", "sql", "test", "concurrent",
     "xml", "dbus", "openglwidgets", "printsupport", "svgwidgets", "quickwidgets",
+    # Tooling / designer helpers nothing in the app or its styles links to.
+    "core5compat", "quicktest", "quickvectorimage", "quickshapesdesignhelpers",
+    "qmlxmllistmodel", "qmldesignsupport", "quickcontrols2windows",
 )
 
 _UNUSED_QML_DIRS = (
@@ -30,12 +33,22 @@ _UNUSED_QML_DIRS = (
     "qtquick/localstorage", "qtquick/vectorimage",
     "qtquick/controls/material", "qtquick/controls/universal", "qtquick/controls/imagine",
     "qtquick/controls/windows",  # (Fusion stays: FluentWinUI3 is built on it)
+    "qt5compat", "qtquick/shapes/designhelpers", "qtqml/xmllistmodel", "qtqml/designsupport",
+    "qtquick/tooling",
 )
 
 _UNUSED_PLUGINS = (
     "qmltooling", "multimedia", "position", "sensors", "sqldrivers", "canbus", "texttospeech",
     "geoservices", "renderers", "sceneparsers", "assetimporters", "geometryloaders",
     "renderplugins", "designer", "printsupport", "virtualkeyboard", "scxmldatamodel",
+    "generic", "platforminputcontexts",
+)
+# Single plugin files: only the native Windows platform and the image formats the UI
+# actually decodes (PNG is built into QtGui; icons are .ico / .png, SVG for style assets).
+_UNUSED_PLUGIN_FILES = (
+    "platforms/qdirect2d.dll", "platforms/qminimal.dll", "platforms/qoffscreen.dll",
+    "imageformats/qgif.dll", "imageformats/qicns.dll", "imageformats/qtga.dll",
+    "imageformats/qtiff.dll", "imageformats/qwbmp.dll", "imageformats/qwebp.dll",
 )
 
 
@@ -66,20 +79,21 @@ def is_unused(dest: str, *, keep_dialogs: bool = False, keep_widgets: bool = Tru
             return False
         if rest.startswith("plugins/"):
             p = rest[len("plugins/"):]
-            return any(p.startswith(u + "/") for u in _UNUSED_PLUGINS)
+            return p in _UNUSED_PLUGIN_FILES or any(p.startswith(u + "/") for u in _UNUSED_PLUGINS)
         if "/" not in rest:
-            if not keep_dialogs and rest.startswith("qt6quickdialogs"):
+            if not keep_dialogs and rest.startswith(("qt6quickdialogs", "qt6quicknativestyle")):
                 return True
             if not keep_widgets and rest.startswith(("qt6widgets", "qtwidgets")):
                 return True
             # Note: QtOpenGL.pyd must stay - PySide6.QtQuick imports it.
             return _qt_dll_unused(rest)
         return False
-    # Worker side: ddddocr only ever loads common_old.onnx (DdddOcr() default);
-    # OpenCV's ffmpeg video backend and Pillow's AVIF codec are never used.
+    # Worker side: ddddocr only ever loads common_old.onnx (DdddOcr() default), and its
+    # text OCR never calls OpenCV - the real cv2 (~83 MB) is replaced by packaging/stubs/cv2,
+    # added after pruning. Pillow's AVIF codec is never used.
     if n in ("ddddocr/common.onnx", "ddddocr/common_det.onnx"):
         return True
-    if n.startswith("cv2/opencv_videoio_ffmpeg"):
+    if n.startswith("cv2/") or n.startswith("opencv_python"):
         return True
     if n.startswith("pil/_avif"):
         return True

@@ -37,7 +37,8 @@ worker = Analysis(
     pathex=[str(ROOT)],
     datas=[(str(ROOT / "resource"), "resource")],
     hiddenimports=["api.captcha", "ddddocr"],
-    excludes=["tkinter", "PySide6", "shiboken6", "matplotlib", "IPython", "pytest"],
+    # cv2: replaced by packaging/stubs/cv2 below (ddddocr's text OCR never uses OpenCV).
+    excludes=["tkinter", "PySide6", "shiboken6", "matplotlib", "IPython", "pytest", "cv2"],
     noarchive=False,
 )
 
@@ -50,6 +51,9 @@ for analysis in (gui, worker):
     analysis.binaries, dropped_bin = prune(analysis.binaries)
     analysis.datas, dropped_dat = prune(analysis.datas)
     print(f"prune: dropped {dropped_bin} binaries, {dropped_dat} data files")
+
+# Plain-file cv2 stand-in in _internal/cv2 (found on sys.path at run time).
+worker.datas.append(("cv2/__init__.py", str(ROOT / "packaging" / "stubs" / "cv2" / "__init__.py"), "DATA"))
 
 gui_exe = EXE(
     PYZ(gui.pure),
