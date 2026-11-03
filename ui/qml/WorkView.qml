@@ -54,6 +54,7 @@ Rectangle {
                 height: parent.height
                 radius: 2
                 color: Theme.success
+                Behavior on width { NumberAnimation { duration: 700; easing.type: Easing.OutCubic } }
             }
         }
 
@@ -66,6 +67,17 @@ Rectangle {
             model: root.hasWork ? root.work.questions : []
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar {}
+            // Question cards cascade in each time a new quiz arrives.
+            populate: Transition {
+                id: cascade
+                SequentialAnimation {
+                    PauseAnimation { duration: Math.min(cascade.ViewTransition.index, 8) * 70 }
+                    ParallelAnimation {
+                        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.normal }
+                        NumberAnimation { property: "y"; from: cascade.ViewTransition.destination.y + 16; duration: Theme.slow; easing.type: Easing.OutCubic }
+                    }
+                }
+            }
             delegate: QuestionCard {
                 required property var modelData
                 width: ListView.view.width - 10

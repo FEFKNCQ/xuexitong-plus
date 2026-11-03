@@ -35,7 +35,7 @@ Item {
                     icon: ""
                     enabled: !controller.running
 
-                    Switch {
+                    AppSwitch {
                         text: "使用本地 cookies 登录"
                         checked: controller.useCookies
                         onToggled: controller.useCookies = checked
@@ -112,7 +112,7 @@ Item {
                     subtitle: "完成所选课程的任务点后，继续轮询章节增加学习次数"
                     icon: ""
                     enabled: !controller.running
-                    Switch {
+                    AppSwitch {
                         text: "完成课程后增加章节学习次数"
                         checked: controller.addLearningCount
                         onToggled: controller.addLearningCount = checked
@@ -201,14 +201,14 @@ Item {
                     color: controller.dirty ? Theme.accent : Theme.muted
                     font.pixelSize: 12
                 }
-                Button {
+                AppButton {
                     text: "撤销修改"
                     enabled: controller.dirty && !controller.running
                     onClicked: controller.revertConfig()
                 }
-                Button {
+                AppButton {
                     text: "保存"
-                    highlighted: true
+                    kind: "primary"
                     enabled: controller.dirty && !controller.running
                     onClicked: controller.saveConfig()
                 }

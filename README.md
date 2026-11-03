@@ -1,158 +1,125 @@
-# :computer: 超星学习通自动化完成任务点(命令行版)
+<p align="center">
+  <img src="assets/learning_plus.png" width="96" alt="学习通PLUS 图标">
+</p>
+
+<h1 align="center">学习通PLUS</h1>
 
 <p align="center">
-    <a href="https://github.com/Samueli924/chaoxing" target="_blank" style="margin-right: 20px; font-style: normal; text-decoration: none;">
-        <img src="https://img.shields.io/github/stars/Samueli924/chaoxing" alt="Github Stars" />
-    </a>
-    <a href="https://github.com/Samueli924/chaoxing" target="_blank" style="margin-right: 20px; font-style: normal; text-decoration: none;">
-        <img src="https://img.shields.io/github/forks/Samueli924/chaoxing" alt="Github Forks" />
-    </a>
-    <a href="https://github.com/Samueli924/chaoxing" target="_blank" style="margin-right: 20px; font-style: normal; text-decoration: none;">
-        <img src="https://img.shields.io/github/languages/code-size/Samueli924/chaoxing" alt="Code-size" />
-    </a>
-    <a href="https://github.com/Samueli924/chaoxing" target="_blank" style="margin-right: 20px; font-style: normal; text-decoration: none;">
-        <img src="https://img.shields.io/github/v/release/Samueli924/chaoxing?display_name=tag&sort=semver" alt="version" />
-    </a>
+  超星学习通桌面客户端 · 基于开源项目 <a href="https://github.com/Samueli924/chaoxing">Samueli924/chaoxing</a>
+  <br>
+  <img src="https://img.shields.io/badge/version-1.0.0-2563eb" alt="version 1.0.0">
+  <img src="https://img.shields.io/badge/platform-Windows%2010%20%2F%2011-0f172a" alt="Windows 10 / 11">
+  <img src="https://img.shields.io/badge/license-GPL--3.0-13865a" alt="GPL-3.0">
 </p>
-:muscle: 本项目的最终目的是通过开源消灭所谓的付费刷课平台，希望有能力的朋友都可以为这个项目提交代码，支持本项目的良性发展
 
-:star: 觉得有帮助的朋友可以给个Star
+<p align="center">
+  <img src="docs/media/splash.gif" width="420" alt="启动动画">
+</p>
 
-## :point_up: 更新通知
-20241021更新通知： 感谢[sz134055](https://github.com/sz134055)提交代码[PR #360](https://github.com/Samueli924/chaoxing/pull/360)，**添加了对题库答题的支持**  
+---
 
-## :books: 使用方法
+## 一、软件介绍
 
-### 源码运行（Python 3.13+）
+学习通PLUS 把原本的命令行工具做成了一个 Windows 桌面应用：图形化配置、实时查看运行状态，不用再在终端里输入参数。
 
-1. clone 项目至本地
+<p align="center">
+  <img src="docs/media/demo-light.gif" alt="运行演示" width="900">
+</p>
 
-```bash
-git clone --depth=1 https://github.com/Samueli924/chaoxing 
-cd chaoxing
+> 截图和动图使用模拟数据录制，不对应任何真实账号或课程。视频预览区域在录制中显示为黑色，是因为系统视频控件无法被截取，实际使用时会显示当前课程视频。
+
+### 主要特性
+
+- **运行面板**：左侧是仪表盘（当前课程、章节、已完成任务、运行时长）、基本参数、音视频任务进度和可筛选的运行日志。
+- **只读可视化面板**：右侧实时显示当前任务的视频（静音、不可操作），以及章节检测的题目和填写的答案（标注题库匹配 / 随机作答、覆盖率和提交状态），界面只用于查看。
+- **课程选择**：不填写课程 ID 时，运行后会弹出课程列表供勾选。
+- **Fluent 风格界面**：浅色 / 深色 / 跟随系统，全程动画过渡。
+- **启动画面**：程序在后台加载配置和界面，加载完成后进入主窗口。
+- **首次启动引导**：欢迎 → 免责声明 → 账号 → 开始使用；账号可以稍后再配置。
+- **自制安装程序**：按当前用户安装，不需要管理员权限，支持升级和卸载。
+- **本地保存**：配置、cookies 和日志只保存在本机 `%APPDATA%\ChaoxingDesktop`。
+
+### 截图
+
+| 运行面板 · 视频 | 运行面板 · 答题 |
+| --- | --- |
+| ![运行面板（视频）](docs/media/dashboard-video-light.png) | ![运行面板（答题）](docs/media/dashboard-quiz-light.png) |
+
+| 深色模式 | 首次启动引导 |
+| --- | --- |
+| ![深色模式](docs/media/dashboard-quiz-dark.png) | ![免责声明](docs/media/onboarding-disclaimer.png) |
+
+| 安装程序 · 欢迎 | 安装程序 · 选项 |
+| --- | --- |
+| ![安装程序欢迎页](docs/media/installer-welcome.png) | ![安装程序选项页](docs/media/installer-options.png) |
+
+---
+
+## 二、如何使用
+
+### 1. 安装
+
+1. 在 [Releases](../../releases) 下载 `学习通PLUS-Setup-<版本>.exe`。
+2. 双击运行，按向导完成安装：接受许可协议 → 选择安装位置和快捷方式 → 安装。
+   - 默认安装到 `%LOCALAPPDATA%\Programs\学习通PLUS`，不需要管理员权限。
+   - 已安装旧版本时再次运行会直接升级，配置不受影响。
+3. 视频预览需要 Microsoft Edge WebView2 运行时（Windows 11 已自带）。
+
+也可以下载 `学习通PLUS-Windows.zip` 免安装使用：解压后运行 `学习通PLUS.exe`，保持 `chaoxing-worker.exe` 和 `_internal` 文件夹在同一目录。
+
+### 2. 首次启动
+
+第一次打开会进入开始引导：
+
+1. **欢迎**：了解主要功能。
+2. **免责声明**：阅读声明，并在输入框中完整写一遍，内容一致后才能继续。
+3. **账号**：填写学习通账号和密码，或开启 cookies 登录（把 `cookies.txt` 放入配置目录）。暂时不想填可以点“稍后配置”，之后在 **设置 → 账号** 中填写；没配置前运行面板顶部会一直提醒。
+4. **开始使用**：进入运行面板。
+
+### 3. 运行任务
+
+1. 在运行面板左侧的 **基本参数** 里设置课程 ID（留空则运行时选择）、视频速度、并行章节数和未开放章节的处理方式。
+2. 点击 **开始运行**。参数会自动保存，运行期间锁定。
+3. 在左侧查看进度和日志，在右侧可视化面板查看当前视频或章节检测内容。
+4. 需要时点击 **停止**。
+
+其他选项（重试间隔、章节学习次数、外观）在 **设置** 页。题库等高级配置仍在配置目录的 `config.ini` 中，说明见 [docs/CLI.md](docs/CLI.md)。
+
+### 4. 卸载
+
+在 Windows **设置 → 应用** 中找到 学习通PLUS 卸载，或运行安装目录中的 `学习通PLUS.exe --uninstall`。卸载时可以选择是否同时删除配置、cookies 和日志（默认保留）。
+
+### 从源码构建
+
+需要 Windows 10/11 x64 和 PowerShell：
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\build_windows.ps1
 ```
 
-2. 安装依赖
+脚本会准备便携 Python 和依赖，生成：
 
-```bash
-pip install -r requirements.txt
-```
-或使用 `pip install .`（通过 pyproject.toml 安装依赖）
+- `dist\学习通PLUS\`：免安装程序目录
+- `dist\学习通PLUS-Windows.zip`：免安装压缩包
+- `dist\学习通PLUS-Setup-<版本>.exe`：安装程序
 
-3. (可选直接运行)
+开发者说明见 [CLAUDE.md](CLAUDE.md)，命令行用法见 [docs/CLI.md](docs/CLI.md)。
 
-```bash
-python main.py
-```
+---
 
-4. (可选配置文件运行)
+## 三、关于原仓库
 
-> 复制config_template.ini文件为config.ini文件，修改文件内的账号密码内容
+学习通PLUS 基于 [**Samueli924/chaoxing**](https://github.com/Samueli924/chaoxing)（超星学习通自动化完成任务点，命令行版）开发。任务处理、登录、题库对接等核心逻辑均来自原仓库及其贡献者；本项目在此基础上增加了桌面界面、可视化面板、安装程序等。
 
-```bash
-python main.py -c config.ini
-```
+- 原仓库地址：<https://github.com/Samueli924/chaoxing>
+- 原仓库贡献者：<https://github.com/Samueli924/chaoxing/graphs/contributors>
+- 命令行版使用说明（来自原仓库）：[docs/CLI.md](docs/CLI.md)
 
-5. (可选命令行运行)
+感谢原作者和所有贡献者的开源工作。
 
-```bash
-python main.py -u 手机号 -p 密码 -l 课程ID1,课程ID2,课程ID3...(可选) -a [retry|ask|continue](可选)
-```
+### 许可与免责声明
 
-> Tips:  
-> 如果已安装低版本 Python 推荐使用 `uv` 运行：
-
-```bash
-uv run --python 3.13 main.py
-```
-
-使用配置文件运行 ：
-```bash
-uv run --python 3.13 main.py -c config.ini
-```
-
-### 打包文件运行
-1. 从最新[Releases](https://github.com/Samueli924/chaoxing/releases)中下载exe文件
-2. (可选直接运行) 双击运行即可
-3. (可选配置文件运行) 下载config_template.ini文件保存为config.ini文件，修改文件内的账号密码内容, 执行 `./chaoxing.exe -c config.ini`
-4. (可选命令行运行)`./chaoxing.exe -u "手机号" -p "密码" -l 课程ID1,课程ID2,课程ID3...(可选) -a [retry|ask|continue](可选)`
-
-### Docker运行
-1. 构建Docker镜像
-   ```bash
-   docker build -t chaoxing .
-   ```
-
-2. 运行Docker容器
-   ```bash
-   # 直接运行（将使用默认配置模板）
-   docker run -it chaoxing
-   
-   # 使用自定义配置文件运行
-   docker run -it -v /本地路径/config.ini:/config/config.ini chaoxing
-   ```
-
-3. 配置说明
-   - Docker版本默认使用挂载到 `/config/config.ini` 的配置文件
-   - 首次运行时，会自动将 `config_template.ini` 复制到该位置作为模板
-   - 可以将本地编辑好的配置文件挂载到容器中，按照上述示例命令操作
-
-### 题库配置说明
-
-在你的配置文件中找到`[tiku]`，按照注释填写想要使用的题库名（即`provider`，大小写要一致），并填写必要信息，如token，然后在启动时添加`-c [你的配置文件路径]`即可。
-
-题库会默认使用根目录下的`config.ini`文件中的配置，所以你可以复制配置模板（参照前面的说明）命名为`config.ini`，并只配置题库项`[tiku]`，这样即使你不填写账号之类的信息，不使用`-c`参数指定配置文件，题库也会根据这个配置文件自动配置并启用。
-
-对于那些有章节检测且任务点需要解锁的课程，必须配置题库。
-
-**提交模式与答题**
-不配置题库（既不提供配置文件，也没有放置默认配置文件`config.ini`或填写要使用的题库）视为不使用题库，对于章节检测等需要答题的任务会自动跳过。
-题库覆盖率：搜到的题目占总题目的比例
-提交模式`submit`值为
-
-- `true`：会答完题，达到题库题目覆盖率提交，没达到只保存，**正确率不做保证**。
-- `false`：会答题，但是不会提交，仅保存搜到答案的，随后你可以自行前往学习通查看、修改、提交。**任何填写不正确的`submit`值会被视为`false`**
-
-> 题库名即`answer.py`模块中根据`Tiku`类实现的具体题库类，例如`TikuYanxi`（言溪题库），在填写时，请务必保持大小写一致。
-
-### 已关闭任务点处理配置说明
-
-在配置文件的 `[common]` 部分，可以通过 `notopen_action` 选项配置遇到已关闭任务点时的处理方式:
-
-- `retry` (默认): 遇到关闭的任务点时尝试重新完成上一个任务点，如果连续重试 3 次仍然失败 (或未配置题库及自动提交) 则停止
-- `ask`: 遇到关闭的任务点时询问用户是否继续。选择继续后会自动跳过连续的关闭任务点，直到遇到开放的任务点
-- `continue`: 自动跳过所有关闭的任务点，继续检查和完成后续任务点
-
-也可以通过命令行参数 `-a` 或 `--notopen-action` 指定处理方式，例如：
-
-```bash
-python main.py -a ask  # 使用询问模式
-```
-
-### 章节学习次数配置说明
-
-在配置文件的 `[common]` 部分，可以通过下面两个选项控制章节学习次数功能：
-
-- `add_learning_count = false`：是否在完成刷课任务后，继续对课程章节执行学习次数增加
-- `target_count = 100`：章节学习次数的目标总次数，程序会轮询课程章节直到达到该次数
-
-当前实现会先完成所选课程的任务点，再统一执行章节学习次数增加流程。如果开启了 `add_learning_count`，它会作为刷课完成后的追加步骤执行，而不是独立模式。
-
-**外部通知配置说明**
-
-这功能会在所有课程学习任务结束后，或是程序出现错误时，使用外部通知服务推送消息告知你（~~有用但不多~~）
-
-与题库配置类似，不填写视为不使用，按照注释填写想要使用的外部通知服务（也是`provider`，大小写要一致），并填写必要的`url`
-
-## :heart: CONTRIBUTORS
-
-![Alt](https://repobeats.axiom.co/api/embed/d3931e84b4b2f17cbe60cafedb38114bdf9931cb.svg "Repobeats analytics image")  
-
-<a style="margin-top: 15px" href="https://github.com/Samueli924/chaoxing/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Samueli924/chaoxing" />
-</a>
-
-## :warning: 免责声明
-- 本代码遵循 [GPL-3.0 License](https://github.com/Samueli924/chaoxing/blob/main/LICENSE) 协议，允许**开源/免费使用和引用/修改/衍生代码的开源/免费使用**，不允许**修改和衍生的代码作为闭源的商业软件发布和销售**，禁止**使用本代码盈利**，以此代码为基础的程序**必须**同样遵守 [GPL-3.0 License](https://github.com/Samueli924/chaoxing/blob/main/LICENSE) 协议
-- 本代码仅用于**学习讨论**，禁止**用于盈利**
-- 他人或组织使用本代码进行的任何**违法行为**与本人无关
+- 本项目与原仓库一样遵循 [GPL-3.0](LICENSE) 协议：允许开源 / 免费使用、引用、修改和衍生；衍生版本必须同样以 GPL-3.0 开源；**禁止将本项目或其衍生版本作为闭源商业软件发布或销售，禁止用于盈利**。
+- 本软件与超星、学习通官方无任何关联。程序图标以学习通官方图标为底图制作，相关商标归其权利人所有。
+- 使用自动化工具可能违反学习通用户协议及学校的课程或学术诚信规定，可能导致账号受限、封禁或成绩作废，相关后果由使用者自行承担。
+- 本代码仅用于学习讨论，他人或组织使用本代码进行的任何违法违规行为与作者无关。

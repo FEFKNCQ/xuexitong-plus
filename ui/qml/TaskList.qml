@@ -19,6 +19,16 @@ Card {
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: ScrollBar {}
 
+        add: Transition {
+            ParallelAnimation {
+                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.normal }
+                NumberAnimation { property: "scale"; from: 0.96; to: 1; duration: Theme.normal; easing.type: Easing.OutCubic }
+            }
+        }
+        displaced: Transition {
+            NumberAnimation { properties: "y"; duration: Theme.normal; easing.type: Easing.OutCubic }
+        }
+
         delegate: Rectangle {
             required property string name
             required property int percent
@@ -27,7 +37,8 @@ Card {
             width: ListView.view.width - 8
             height: 46
             radius: Theme.radius
-            color: Theme.surfaceAlt
+            color: done ? Theme.successSoft : Theme.surfaceAlt
+            Behavior on color { ColorAnimation { duration: Theme.slow } }
 
             ColumnLayout {
                 anchors.fill: parent
@@ -68,6 +79,7 @@ Card {
                         height: parent.height
                         radius: 2
                         color: done ? Theme.success : Theme.accent
+                        Behavior on color { ColorAnimation { duration: Theme.slow } }
                         Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
                     }
                 }

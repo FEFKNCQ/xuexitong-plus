@@ -4,13 +4,14 @@
 
 ## 安装
 
-- **安装包（推荐）**：运行 `学习通PLUS-Setup-<版本>.exe`，默认安装到当前用户，不需要管理员权限，会创建开始菜单（可选桌面）快捷方式。卸载时配置目录会保留。
+- **安装包（推荐）**：运行 `学习通PLUS-Setup-<版本>.exe`，按向导选择安装位置和快捷方式。默认安装到当前用户（`%LOCALAPPDATA%\Programs\学习通PLUS`），不需要管理员权限。已安装时再次运行会升级，配置不受影响。
+- **卸载**：在 Windows“设置 → 应用”里卸载 学习通PLUS，或运行安装目录里的 `学习通PLUS.exe --uninstall`。可以选择是否同时删除配置、cookies 和日志，默认保留。
 - **免安装**：解压 `学习通PLUS-Windows.zip` 的全部内容，双击 `学习通PLUS.exe`。请保持同目录中的 `chaoxing-worker.exe` 和 `_internal` 文件夹完整。
 
 ## 使用
 
 1. 启动时会先显示启动画面，程序在后台加载，加载完成后进入主界面。
-2. 第一次启动会进入开始引导：欢迎 → 免责声明（需同意） → 填写账号密码或选择 cookies 登录 → 开始使用。之后可在“设置 → 关于”里重新查看。
+2. 第一次启动会进入开始引导：欢迎 → 免责声明（需要在输入框里完整写一遍声明） → 填写账号密码、选择 cookies 登录，或“稍后配置” → 开始使用。选择稍后配置时，运行面板顶部会一直提醒，直到在“设置 → 账号”里填好。之后可在“设置 → 关于”里重新查看引导。
 3. 以后需要修改账号时，在“设置”页修改后点击“保存”。
 4. 回到“运行面板”，在左侧“基本参数”里调整课程 ID、视频速度、并行章节数和未开放章节的处理方式，然后点击“开始运行”。开始时会自动保存参数；任务运行中参数会锁定。
 5. 课程 ID 留空时，任务启动后会弹出课程选择窗口；不勾选任何课程则学习全部课程。
@@ -41,6 +42,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build_windows.ps1
 
 图标以[学习通官方 App Store 图标](https://apps.apple.com/cn/app/%E5%AD%A6%E4%B9%A0%E9%80%9A/id977946724)为底图，并在左上角添加 PLUS 标识。发行包附带 ICO、PNG 和官方原图。
 
-脚本会在 `.build` 中准备便携 Python 和依赖，构建结果位于 `dist\学习通PLUS`，发行压缩包为 `dist\学习通PLUS-Windows.zip`。装了 Inno Setup 6 时还会生成安装包 `dist\学习通PLUS-Setup-<版本>.exe`。
+脚本会在 `.build` 中准备便携 Python 和依赖，构建结果位于 `dist\学习通PLUS`，发行压缩包为 `dist\学习通PLUS-Windows.zip`。同时会生成安装包 `dist\学习通PLUS-Setup-<版本>.exe`。
 
 本程序基于开源项目 [Samueli924/chaoxing](https://github.com/Samueli924/chaoxing)，遵循 GPL-3.0 协议，禁止用于盈利。

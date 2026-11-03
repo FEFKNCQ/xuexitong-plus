@@ -85,30 +85,47 @@ New-Item -ItemType Directory -Path $releaseAssets -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $projectRoot "assets\learning_plus.ico") -Destination $releaseAssets -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "assets\learning_plus.png") -Destination $releaseAssets -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot "assets\chaoxing_official.jpg") -Destination $releaseAssets -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot "LICENSE") -Destination (Join-Path $releaseDir "LICENSE.txt") -Force
+# Qt ships build leftovers (objects-*\*.obj) inside its qml folder. They are never loaded and
+# their deep paths can exceed MAX_PATH when installed, so drop them from the release.
+Get-ChildItem -LiteralPath (Join-Path $releaseDir "_internal") -Directory -Recurse -Filter "objects-*" -ErrorAction SilentlyContinue |
+    Remove-Item -Recurse -Force
 $releaseZip = Join-Path $projectRoot "dist\学习通PLUS-Windows.zip"
 Compress-Archive -LiteralPath $releaseDir -DestinationPath $releaseZip -CompressionLevel Optimal -Force
 
-# Installer (Inno Setup 6). Skipped with a note when ISCC.exe is not installed.
-$isccCandidates = @(
-    (Get-Command iscc -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1),
-    (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe"),
-    (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"),
-    (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe")
-) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
-$iscc = $isccCandidates | Select-Object -First 1
+# Installer: our own Qt Quick setup program (installer\setup.py) with the release zip
+# appended to the end of the exe. zipfile finds the archive from the file's end.
 $versionMatch = Select-String -LiteralPath (Join-Path $projectRoot "ui\controller.py") -Pattern '^APP_VERSION = "([^"]+)"' | Select-Object -First 1
 $appVersion = if ($versionMatch) { $versionMatch.Matches[0].Groups[1].Value } else { "0.0.0" }
-$installer = $null
-if ($iscc) {
-    Get-ChildItem -LiteralPath $distRoot -Filter "学习通PLUS-Setup-*.exe" -ErrorAction SilentlyContinue | Remove-Item -Force
-    & $iscc /Q "/DAppVersion=$appVersion" "/DSourceDir=$releaseDir" (Join-Path $projectRoot "installer\学习通PLUS.iss")
-    if ($LASTEXITCODE -ne 0) { throw "Installer build failed." }
-    $installer = Join-Path $distRoot "学习通PLUS-Setup-$appVersion.exe"
-} else {
-    Write-Host "Inno Setup 6 not found; skipping installer. Install it with: winget install JRSoftware.InnoSetup --scope user"
-}
+$setupWork = Join-Path $buildRoot "pyinstaller-setup"
+$setupDist = Join-Path $buildRoot "setup-dist"
+Remove-Item -LiteralPath $setupWork, $setupDist -Recurse -Force -ErrorAction SilentlyContinue
+& $pythonExe -m PyInstaller --noconfirm --clean --onefile --windowed `
+    --name setup-stub `
+    --icon "$projectRoot\assets\learning_plus.ico" `
+    --paths $projectRoot `
+    --add-data "$projectRoot\ui\qml;ui\qml" `
+    --add-data "$projectRoot\installer\qml;installer\qml" `
+    --add-data "$projectRoot\assets\learning_plus.png;assets" `
+    --hidden-import PySide6.QtQml `
+    --hidden-import PySide6.QtQuick `
+    --hidden-import PySide6.QtQuickControls2 `
+    --exclude-module PySide6.QtWebView `
+    --exclude-module PySide6.QtWebEngineCore `
+    --distpath $setupDist --workpath $setupWork `
+    (Join-Path $projectRoot "installer\setup.py")
+if ($LASTEXITCODE -ne 0) { throw "Setup program build failed." }
+Get-ChildItem -LiteralPath $distRoot -Filter "学习通PLUS-Setup-*.exe" -ErrorAction SilentlyContinue | Remove-Item -Force
+$installer = Join-Path $distRoot "学习通PLUS-Setup-$appVersion.exe"
+$out = [IO.File]::Open($installer, [IO.FileMode]::Create)
+try {
+    foreach ($part in @((Join-Path $setupDist "setup-stub.exe"), $releaseZip)) {
+        $in = [IO.File]::OpenRead($part)
+        try { $in.CopyTo($out) } finally { $in.Dispose() }
+    }
+} finally { $out.Dispose() }
 
 Write-Host "Build complete: $(Join-Path $releaseDir '学习通PLUS.exe')"
 Write-Host "Worker component: $(Join-Path $releaseDir 'chaoxing-worker.exe')"
 Write-Host "Release archive: $releaseZip"
-if ($installer) { Write-Host "Installer: $installer" }
+Write-Host "Installer: $installer"

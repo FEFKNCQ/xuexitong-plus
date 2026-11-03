@@ -20,6 +20,8 @@ QtObject {
 
     // Accent and status
     readonly property color accent: dark ? "#6aa8ff" : "#2563eb"
+    readonly property color accentHover: dark ? "#82b6ff" : "#1d55d6"
+    readonly property color accentPressed: dark ? "#5a96ec" : "#1847b5"
     readonly property color accentText: dark ? "#0b1530" : "#ffffff"
     readonly property color accentSoft: dark ? "#22324d" : "#e6eeff"
     readonly property color success: dark ? "#5fd39b" : "#13865a"
@@ -33,6 +35,13 @@ QtObject {
     readonly property int radiusLarge: 12
     readonly property int gap: 12
     readonly property int pad: 16
+
+    // Motion
+    readonly property int fast: 140
+    readonly property int normal: 240
+    readonly property int slow: 380
+
+    readonly property string uiFont: "Microsoft YaHei UI"
 
     readonly property string iconFont: Qt.fontFamilies().indexOf("Segoe Fluent Icons") >= 0
         ? "Segoe Fluent Icons" : "Segoe MDL2 Assets"

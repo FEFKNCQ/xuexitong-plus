@@ -67,18 +67,23 @@ Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: optText.implicitHeight + 14
                 radius: 6
-                color: modelData.selected ? Theme.accentSoft : Theme.surface
-                border.color: modelData.selected ? Theme.accent : Theme.border
+                property bool marked: false
+                color: marked ? Theme.accentSoft : Theme.surface
+                border.color: marked ? Theme.accent : Theme.border
+                Behavior on color { ColorAnimation { duration: Theme.slow } }
+                Behavior on border.color { ColorAnimation { duration: Theme.slow } }
+                Timer { interval: 420; running: modelData.selected; onTriggered: parent.marked = true }
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 10
                     anchors.rightMargin: 10
                     spacing: 8
                     Text {
-                        text: modelData.selected ? "" : ""
+                        text: parent.parent.marked ? "" : ""
                         font.family: Theme.iconFont
                         font.pixelSize: 13
-                        color: modelData.selected ? Theme.accent : Theme.faint
+                        color: parent.parent.marked ? Theme.accent : Theme.faint
+                        Behavior on color { ColorAnimation { duration: Theme.slow } }
                     }
                     Text {
                         id: optText

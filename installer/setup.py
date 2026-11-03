@@ -1,0 +1,254 @@
+# -*- coding: utf-8 -*-
+"""学习通PLUS setup program (QML UI in installer/qml/Setup.qml).
+
+The release zip is appended to the end of the built setup exe; ``zipfile`` finds its
+central directory from the file's end, so the exe can be opened as the archive
+directly. For development pass ``--payload path\\to\\学习通PLUS-Windows.zip``.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import sys
+import zipfile
+from pathlib import Path
+
+ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(ROOT))
+
+from PySide6.QtCore import Property, QObject, QThread, QUrl, Signal, Slot, qInstallMessageHandler  # noqa: E402
+from PySide6.QtGui import QFont, QGuiApplication, QIcon  # noqa: E402
+from PySide6.QtQml import QQmlApplicationEngine  # noqa: E402
+from PySide6.QtQuickControls2 import QQuickStyle  # noqa: E402
+
+from ui import winsetup  # noqa: E402
+from ui.controller import APP_VERSION as VERSION  # noqa: E402
+ZIP_ROOT = winsetup.APP_NAME + "/"
+
+
+def payload_path(argv: list[str]) -> Path:
+    if "--payload" in argv:
+        return Path(argv[argv.index("--payload") + 1])
+    return Path(sys.executable)
+
+
+def _members(archive: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
+    out = []
+    for info in archive.infolist():
+        name = info.filename.replace("\\", "/")
+        if not name.startswith(ZIP_ROOT) or name.endswith("/"):
+            continue
+        rel = name[len(ZIP_ROOT):]
+        # Qt build leftovers: very deep paths, never loaded.
+        if "/objects-" in "/" + rel or rel.endswith(".obj"):
+            continue
+        out.append(info)
+    return out
+
+
+class InstallWorker(QThread):
+    progressed = Signal(float, str)
+    failed = Signal(str)
+    succeeded = Signal()
+
+    def __init__(self, payload: Path, target: Path, desktop: bool, start_menu: bool) -> None:
+        super().__init__()
+        self.payload = payload
+        self.target = target
+        self.desktop = desktop
+        self.start_menu = start_menu
+
+    def run(self) -> None:
+        try:
+            self._install()
+        except Exception as exc:  # surfaced on the error page
+            self.failed.emit(f"{type(exc).__name__}: {exc}")
+        else:
+            self.succeeded.emit()
+
+    def _install(self) -> None:
+        target = self.target
+        self.progressed.emit(0.0, "检查运行中的程序")
+        running = winsetup.running_app_processes()
+        if running:
+            raise RuntimeError("学习通PLUS 正在运行，请先关闭程序（包括正在运行的任务）后重试。")
+
+        target.mkdir(parents=True, exist_ok=True)
+        # Remove the previous version's files so nothing stale is left behind.
+        if (target / winsetup.MARKER).exists() or (target / winsetup.APP_EXE).exists():
+            self.progressed.emit(0.02, "移除旧版本文件")
+            internal = target / "_internal"
+            if internal.exists():
+                shutil.rmtree(internal)
+
+        with zipfile.ZipFile(self.payload) as archive:
+            members = _members(archive)
+            if not members:
+                raise RuntimeError("安装包内容为空或已损坏。")
+            total = sum(m.file_size for m in members) or 1
+            done = 0
+            for info in members:
+                rel = info.filename.replace("\\", "/")[len(ZIP_ROOT):]
+                dest = target / Path(rel)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(info) as src, open(dest, "wb") as dst:
+                    shutil.copyfileobj(src, dst, 1024 * 1024)
+                done += info.file_size
+                self.progressed.emit(0.05 + 0.85 * done / total, rel)
+
+        self.progressed.emit(0.92, "创建快捷方式")
+        exe = target / winsetup.APP_EXE
+        if self.start_menu:
+            winsetup.create_shortcut(winsetup.start_menu_shortcut(), exe)
+        if self.desktop:
+            winsetup.create_shortcut(winsetup.desktop_shortcut(), exe)
+
+        self.progressed.emit(0.97, "写入卸载信息")
+        (target / winsetup.MARKER).write_text(VERSION, encoding="utf-8")
+        winsetup.register(target, VERSION, total)
+        self.progressed.emit(1.0, "安装完成")
+
+
+class Installer(QObject):
+    stateChanged = Signal()
+    progressChanged = Signal()
+
+    def __init__(self, payload: Path, parent=None) -> None:
+        super().__init__(parent)
+        self._payload = payload
+        self._state = "idle"      # idle | installing | done | error
+        self._progress = 0.0
+        self._current = ""
+        self._error = ""
+        self._worker: InstallWorker | None = None
+        self._installed = winsetup.read_installed()
+        self._size_mb = 0
+        self._payload_ok = False
+        try:
+            with zipfile.ZipFile(payload) as archive:
+                members = _members(archive)
+                self._payload_ok = bool(members)
+                self._size_mb = round(sum(m.file_size for m in members) / 1024 / 1024)
+        except (OSError, zipfile.BadZipFile):
+            self._payload_ok = False
+
+    version = Property(str, lambda self: VERSION, constant=True)
+    appName = Property(str, lambda self: winsetup.APP_NAME, constant=True)
+    iconUrl = Property(QUrl, lambda self: QUrl.fromLocalFile(str(ROOT / "assets" / "learning_plus.png")), constant=True)
+    requiredMb = Property(int, lambda self: self._size_mb, constant=True)
+    payloadOk = Property(bool, lambda self: self._payload_ok, constant=True)
+    installedVersion = Property(str, lambda self: (self._installed or {}).get("version", ""), constant=True)
+    defaultDir = Property(str, lambda self: (self._installed or {}).get("location") or str(winsetup.default_install_dir()), constant=True)
+    state = Property(str, lambda self: self._state, notify=stateChanged)
+    errorText = Property(str, lambda self: self._error, notify=stateChanged)
+    progress = Property(float, lambda self: self._progress, notify=progressChanged)
+    currentFile = Property(str, lambda self: self._current, notify=progressChanged)
+
+    @Slot(str, result=str)
+    def normalizeDir(self, value: str) -> str:
+        """Turn a picked folder URL/path into a path; append the app folder name if missing."""
+        path = QUrl(value).toLocalFile() if value.startswith("file:") else value
+        path = path.strip().strip('"')
+        if not path:
+            return ""
+        p = Path(path)
+        if p.name != winsetup.APP_NAME:
+            p = p / winsetup.APP_NAME
+        return str(p)
+
+    @Slot(str, result=str)
+    def freeSpaceText(self, folder: str) -> str:
+        probe = Path(folder)
+        while not probe.exists() and probe.parent != probe:
+            probe = probe.parent
+        try:
+            free = shutil.disk_usage(probe).free
+        except OSError:
+            return ""
+        return f"{free / 1024 ** 3:.1f} GB 可用"
+
+    @Slot(str, bool, bool)
+    def install(self, folder: str, desktop: bool, start_menu: bool) -> None:
+        if self._state == "installing":
+            return
+        self._state = "installing"
+        self._error = ""
+        self._progress = 0.0
+        self.stateChanged.emit()
+        self._worker = InstallWorker(self._payload, Path(folder), desktop, start_menu)
+        self._worker.progressed.connect(self._on_progress)
+        self._worker.failed.connect(self._on_failed)
+        self._worker.succeeded.connect(self._on_done)
+        self._worker.start()
+
+    def _on_progress(self, value: float, current: str) -> None:
+        self._progress = value
+        self._current = current
+        self.progressChanged.emit()
+
+    def _on_failed(self, message: str) -> None:
+        self._state = "error"
+        self._error = message
+        self.stateChanged.emit()
+
+    def _on_done(self) -> None:
+        self._state = "done"
+        self.stateChanged.emit()
+
+    @Slot(str)
+    def launch(self, folder: str) -> None:
+        exe = Path(folder) / winsetup.APP_EXE
+        if exe.exists():
+            os.startfile(str(exe))  # noqa: S606 - starting the app we just installed
+
+
+def _install_log() -> None:
+    """Qt/QML messages go to %TEMP%\\xxtplus-setup.log (the packaged setup has no console)."""
+    try:
+        log = open(Path(os.environ.get("TEMP", ".")) / "xxtplus-setup.log", "w", encoding="utf-8")
+    except OSError:
+        return
+
+    def handler(_mode, _context, message):
+        log.write(message + "\n")
+        log.flush()
+
+    qInstallMessageHandler(handler)
+
+
+def silent_install(argv: list[str]) -> int:
+    """``--silent [--dir PATH] [--no-shortcuts]``: install without UI; exit code 0 on success."""
+    target = Path(argv[argv.index("--dir") + 1]) if "--dir" in argv else winsetup.default_install_dir()
+    shortcuts = "--no-shortcuts" not in argv
+    worker = InstallWorker(payload_path(argv), target, shortcuts, shortcuts)
+    errors: list[str] = []
+    worker.failed.connect(errors.append)
+    worker.run()
+    return 1 if errors else 0
+
+
+def main() -> None:
+    _install_log()
+    if "--silent" in sys.argv:
+        raise SystemExit(silent_install(sys.argv))
+    QGuiApplication.setApplicationName(f"{winsetup.APP_NAME} 安装程序")
+    app = QGuiApplication(sys.argv)
+    app.setWindowIcon(QIcon(str(ROOT / "assets" / "learning_plus.png")))
+    app.setFont(QFont("Microsoft YaHei UI", 10))
+    QQuickStyle.setStyle("Basic")
+
+    installer = Installer(payload_path(sys.argv), app)
+    engine = QQmlApplicationEngine()
+    engine.rootContext().setContextProperty("installer", installer)
+    engine.load(QUrl.fromLocalFile(str(ROOT / "installer" / "qml" / "Setup.qml")))
+    if not engine.rootObjects():
+        raise SystemExit(1)
+    code = app.exec()
+    if installer._worker is not None:
+        installer._worker.wait(5000)
+    raise SystemExit(code)
+
+
+if __name__ == "__main__":
+    main()

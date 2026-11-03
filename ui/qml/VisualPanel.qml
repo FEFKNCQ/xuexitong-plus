@@ -33,12 +33,18 @@ Card {
         }
     ]
 
-    StackLayout {
+    Item {
         Layout.fillWidth: true
         Layout.fillHeight: true
-        currentIndex: controller.visualMode === "work" ? 1 : 0
 
+        // Video and quiz views crossfade; the hidden one becomes invisible after the fade.
         Item {
+            anchors.fill: parent
+            opacity: controller.visualMode === "work" ? 0 : 1
+            visible: opacity > 0.01
+            scale: controller.visualMode === "work" ? 0.98 : 1
+            Behavior on opacity { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
+            Behavior on scale { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
             VideoView {
                 id: video
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -57,6 +63,13 @@ Card {
                 wrapMode: Text.Wrap
             }
         }
-        WorkView {}
+        WorkView {
+            anchors.fill: parent
+            opacity: controller.visualMode === "work" ? 1 : 0
+            visible: opacity > 0.01
+            scale: controller.visualMode === "work" ? 1 : 0.98
+            Behavior on opacity { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
+            Behavior on scale { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
+        }
     }
 }

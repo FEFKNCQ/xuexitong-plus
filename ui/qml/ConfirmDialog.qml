@@ -1,35 +1,25 @@
 import QtQuick
-import QtQuick.Controls
-import QtQuick.Layouts
 import "."
 
-Dialog {
+BaseDialog {
     id: dialog
     property string message: ""
     property string acceptText: "确定"
     property string rejectText: "取消"
     property bool destructive: false
-    modal: true
-    anchors.centerIn: Overlay.overlay
-    width: 420
-    standardButtons: Dialog.NoButton
+    width: 440
 
     contentItem: Text {
         text: dialog.message
         color: Theme.text
+        font.family: Theme.uiFont
         font.pixelSize: 13
+        lineHeight: 1.3
         wrapMode: Text.Wrap
     }
 
-    footer: DialogButtonBox {
-        Button {
-            text: dialog.rejectText
-            DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-        }
-        Button {
-            text: dialog.acceptText
-            highlighted: true
-            DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
-        }
-    }
+    buttons: [
+        AppButton { text: dialog.rejectText; onClicked: dialog.reject() },
+        AppButton { text: dialog.acceptText; kind: dialog.destructive ? "danger" : "primary"; onClicked: dialog.accept() }
+    ]
 }

@@ -15,6 +15,8 @@ Card {
         columnSpacing: 14
         rowSpacing: 8
         enabled: !controller.running
+        opacity: enabled ? 1 : 0.6
+        Behavior on opacity { NumberAnimation { duration: Theme.normal } }
 
         Label { text: "课程 ID"; color: Theme.muted; font.pixelSize: 12; Layout.columnSpan: 2 }
         TextField {

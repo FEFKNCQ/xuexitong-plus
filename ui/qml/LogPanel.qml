@@ -67,6 +67,13 @@ Card {
             onCountChanged: if (follow) Qt.callLater(positionViewAtEnd)
             ScrollBar.vertical: ScrollBar {}
 
+            add: Transition {
+                ParallelAnimation {
+                    NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.normal }
+                    NumberAnimation { property: "x"; from: -8; to: 0; duration: Theme.normal; easing.type: Easing.OutCubic }
+                }
+            }
+
             delegate: RowLayout {
                 required property string level
                 required property string message

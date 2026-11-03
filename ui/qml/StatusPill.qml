@@ -15,6 +15,7 @@ Rectangle {
         : kind === "done" ? Theme.successSoft : Theme.surfaceAlt
 
     color: bgc
+    Behavior on color { ColorAnimation { duration: Theme.normal } }
     radius: height / 2
     implicitHeight: 28
     implicitWidth: row.implicitWidth + 24
@@ -26,6 +27,7 @@ Rectangle {
         Rectangle {
             width: 8; height: 8; radius: 4
             color: pill.fg
+            Behavior on color { ColorAnimation { duration: Theme.normal } }
             SequentialAnimation on opacity {
                 running: pill.kind === "running"
                 loops: Animation.Infinite
@@ -37,6 +39,8 @@ Rectangle {
         Text {
             text: pill.text
             color: pill.fg
+            Behavior on color { ColorAnimation { duration: Theme.normal } }
+            font.family: Theme.uiFont
             font.pixelSize: 12
             font.weight: Font.DemiBold
         }

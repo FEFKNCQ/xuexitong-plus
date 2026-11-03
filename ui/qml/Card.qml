@@ -12,6 +12,21 @@ Rectangle {
     default property alias content: body.data
     property alias actions: actionsRow.data
     property alias bodySpacing: body.spacing
+    // Entrance: fade + lift once the window is shown, staggered by appearDelay (ms).
+    property int appearDelay: 0
+    property bool appeared: false
+
+    opacity: appeared ? 1 : 0
+    transform: Translate {
+        y: card.appeared ? 0 : 14
+        Behavior on y { NumberAnimation { duration: Theme.slow; easing.type: Easing.OutCubic } }
+    }
+    Behavior on opacity { NumberAnimation { duration: Theme.slow; easing.type: Easing.OutCubic } }
+    Timer {
+        interval: Math.max(1, card.appearDelay)
+        running: !card.appeared && card.Window.window !== null && card.Window.window.visible
+        onTriggered: card.appeared = true
+    }
 
     color: Theme.surface
     radius: Theme.radiusLarge
