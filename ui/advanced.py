@@ -17,13 +17,61 @@ from __future__ import annotations
 import configparser
 
 TIKU_PROVIDERS = [
-    {"value": "TikuYanxi", "label": "言溪题库", "hint": "需要 TOKEN"},
-    {"value": "TikuLike", "label": "LIKE 知识库", "hint": "需要 TOKEN，支持联网和识图"},
-    {"value": "TikuGo", "label": "GO 题", "hint": "网课小工具题库"},
-    {"value": "TikuAdapter", "label": "TikuAdapter", "hint": "自建的开源题库服务"},
-    {"value": "AI", "label": "大模型", "hint": "任意 OpenAI 兼容接口"},
-    {"value": "SiliconFlow", "label": "硅基流动", "hint": "SiliconFlow 大模型"},
+    {"value": "TikuYanxi", "kind": "tiku", "label": "言溪题库", "hint": "需要 TOKEN"},
+    {"value": "TikuLike", "kind": "tiku", "label": "LIKE 知识库", "hint": "需要 TOKEN，支持联网和识图"},
+    {"value": "TikuGo", "kind": "tiku", "label": "GO 题", "hint": "网课小工具题库"},
+    {"value": "TikuAdapter", "kind": "tiku", "label": "TikuAdapter", "hint": "自建的开源题库服务"},
+    {"value": "AI", "kind": "ai", "label": "OpenAI 兼容接口", "hint": "DeepSeek、通义千问、Kimi 等提供 OpenAI 格式接口的大模型"},
+    {"value": "SiliconFlow", "kind": "ai", "label": "硅基流动", "hint": "SiliconFlow 大模型"},
 ]
+
+# How 章节检测 answers are found. Stored only through tiku.provider: the mode is derived
+# from which kinds of providers the list holds (题库 always ahead of AI in "both").
+ANSWER_MODES = [
+    {"value": "none", "label": "不查找", "hint": "不使用题库或 AI，找不到答案的题目随机作答"},
+    {"value": "tiku", "label": "题库", "hint": "在题库中搜索题目，按选择顺序查询"},
+    {"value": "ai", "label": "AI 大模型", "hint": "让大模型读题作答，需要接口地址和 API Key"},
+    {"value": "both", "label": "题库 + AI", "hint": "先查题库，题库找不到的题再交给 AI"},
+]
+_KIND = {p["value"]: p["kind"] for p in TIKU_PROVIDERS}
+_DEFAULT = {"tiku": "TikuYanxi", "ai": "AI"}
+
+
+def _split(value: str) -> list[str]:
+    return [v.strip() for v in str(value).split(",") if v.strip()]
+
+
+def answer_mode(provider: str) -> str:
+    kinds = {_KIND.get(p, "tiku") for p in _split(provider)}
+    if not kinds:
+        return "none"
+    if kinds == {"tiku"}:
+        return "tiku"
+    if kinds == {"ai"}:
+        return "ai"
+    return "both"
+
+
+def apply_answer_mode(provider: str, mode: str) -> str:
+    """New provider list for ``mode``, keeping the picks that still fit (default one if none)."""
+    current = _split(provider)
+    tiku = [p for p in current if _KIND.get(p, "tiku") == "tiku"]
+    ai = [p for p in current if _KIND.get(p) == "ai"]
+    if mode == "none":
+        return ""
+    parts = []
+    if mode in ("tiku", "both"):
+        parts += tiku or [_DEFAULT["tiku"]]
+    if mode in ("ai", "both"):
+        parts += ai or [_DEFAULT["ai"]]
+    return ",".join(parts)
+
+
+def order_providers(values: list[str]) -> str:
+    """题库 first, then AI, each keeping the order the user picked them in."""
+    tiku = [v for v in values if _KIND.get(v, "tiku") == "tiku"]
+    ai = [v for v in values if _KIND.get(v) == "ai"]
+    return ",".join(tiku + ai)
 
 NOTIFY_PROVIDERS = [
     {"value": "", "label": "不推送"},
@@ -43,13 +91,13 @@ def _f(section, key, type_, label, default="", hint="", **extra) -> dict:
 GROUPS: list[dict] = [
     {
         "id": "tiku",
-        "title": "题库",
-        "subtitle": "章节检测从哪些题库查找答案",
+        "title": "答题来源",
+        "subtitle": "章节检测用题库还是 AI 找答案",
         "icon": "",
         "fields": [
-            _f("tiku", "provider", "providers", "使用的题库", "",
-               "可多选。按选择顺序查询，前一个找不到再用下一个；都不选则不查题库",
-               options=TIKU_PROVIDERS),
+            _f("tiku", "provider", "providers", "答题方式", "",
+               "可多选，数字是查询顺序：前一个找不到再用下一个",
+               options=TIKU_PROVIDERS, modes=ANSWER_MODES),
             # Per-provider settings, shown only for the selected providers.
             _f("tiku", "", "heading", "言溪 / LIKE 知识库", show={"key": "tiku.provider", "has": ["TikuYanxi", "TikuLike"]}),
             _f("tiku", "tokens", "secret", "TOKEN", "", "多个用英文逗号隔开，按顺序使用",
@@ -66,7 +114,7 @@ GROUPS: list[dict] = [
             _f("tiku", "", "heading", "TikuAdapter", show={"key": "tiku.provider", "has": ["TikuAdapter"]}),
             _f("tiku", "url", "text", "服务地址", "", "例如 http://127.0.0.1:8060/adapter-service/search",
                show={"key": "tiku.provider", "has": ["TikuAdapter"]}),
-            _f("tiku", "", "heading", "大模型", show={"key": "tiku.provider", "has": ["AI"]}),
+            _f("tiku", "", "heading", "OpenAI 兼容接口", show={"key": "tiku.provider", "has": ["AI"]}),
             _f("tiku", "endpoint", "text", "接口地址", "", "通常要带 /v1，例如 https://api.example.com/v1",
                show={"key": "tiku.provider", "has": ["AI"]}),
             _f("tiku", "key", "secret", "API Key", "", show={"key": "tiku.provider", "has": ["AI"]}),

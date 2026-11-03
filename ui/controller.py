@@ -269,6 +269,18 @@ class AppController(QObject):
             self._set_dirty(True)
             self.configChanged.emit()
 
+    @Slot(str, result=str)
+    def answerMode(self, provider: str) -> str:
+        return advanced.answer_mode(provider)
+
+    @Slot(str, str)
+    def setAnswerMode(self, field_id: str, mode: str) -> None:
+        self.setAdvanced(field_id, advanced.apply_answer_mode(self._advanced.get(field_id, ""), mode))
+
+    @Slot(str, "QStringList")
+    def setProviders(self, field_id: str, picked: list) -> None:
+        self.setAdvanced(field_id, advanced.order_providers(list(picked)))
+
     dirty = Property(bool, lambda self: self._dirty, notify=dirtyChanged)
     speedOptions = Property("QStringList", lambda self: SPEED_OPTIONS, constant=True)
     version = Property(str, lambda self: APP_VERSION, constant=True)

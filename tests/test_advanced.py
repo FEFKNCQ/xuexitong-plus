@@ -61,6 +61,26 @@ class AdvancedOptionsTest(unittest.TestCase):
         self.assertFalse(config.has_option("common", "work_max_retries"))   # still the default
         self.assertFalse(config.has_option("tiku", "submit"))
 
+    def test_answer_mode(self):
+        self.assertEqual(advanced.answer_mode(""), "none")
+        self.assertEqual(advanced.answer_mode("TikuYanxi,TikuGo"), "tiku")
+        self.assertEqual(advanced.answer_mode("AI"), "ai")
+        self.assertEqual(advanced.answer_mode("TikuYanxi, SiliconFlow"), "both")
+
+    def test_apply_answer_mode_keeps_fitting_picks(self):
+        self.assertEqual(advanced.apply_answer_mode("TikuGo,AI", "tiku"), "TikuGo")
+        self.assertEqual(advanced.apply_answer_mode("TikuGo,AI", "ai"), "AI")
+        self.assertEqual(advanced.apply_answer_mode("TikuGo", "both"), "TikuGo,AI")        # default AI added
+        self.assertEqual(advanced.apply_answer_mode("SiliconFlow", "both"), "TikuYanxi,SiliconFlow")
+        self.assertEqual(advanced.apply_answer_mode("TikuGo", "ai"), "AI")
+        self.assertEqual(advanced.apply_answer_mode("TikuGo,AI", "none"), "")
+        for mode in ("tiku", "ai", "both"):
+            self.assertEqual(advanced.answer_mode(advanced.apply_answer_mode("", mode)), mode)
+
+    def test_order_providers_puts_tiku_first(self):
+        self.assertEqual(advanced.order_providers(["AI", "TikuGo", "SiliconFlow", "TikuYanxi"]),
+                         "TikuGo,TikuYanxi,AI,SiliconFlow")
+
     def test_normalize(self):
         self.assertEqual(advanced.normalize("x", True), "true")
         self.assertEqual(advanced.normalize("x", False), "false")

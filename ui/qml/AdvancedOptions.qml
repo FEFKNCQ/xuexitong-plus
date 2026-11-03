@@ -9,7 +9,7 @@ import "."
 Card {
     id: adv
     title: "高级选项"
-    subtitle: "题库、答题和通知推送，对应配置文件 config.ini"
+    subtitle: "答题来源（题库 / AI）、答题和通知推送，对应配置文件 config.ini"
     icon: ""
 
     property int tab: 0
@@ -240,78 +240,150 @@ Card {
         }
     }
 
-    // Ordered multi-select: the badge shows the query order.
+    // 答题方式: 不查找 / 题库 / AI 大模型 / 题库 + AI, then the matching sources as chips.
+    // Everything is stored in tiku.provider; the mode is derived from it (ui/advanced.py).
+    component ProviderChip: Rectangle {
+        id: chip
+        property var field
+        property var option
+        readonly property var picked: adv.listOf(field.id)
+        readonly property int order: picked.indexOf(option.value)
+        readonly property bool on: order >= 0
+        // Same-kind picks; the last one of a kind the mode needs cannot be removed.
+        readonly property int sameKind: field.options.filter(o => o.kind === option.kind && picked.indexOf(o.value) >= 0).length
+        width: chipRow.implicitWidth + 24
+        height: 34
+        radius: 17
+        color: on ? Theme.accentSoft : (chipHover.hovered ? Theme.surfaceAlt : Theme.surface)
+        border.color: on ? Theme.accent : (chipHover.hovered ? Theme.borderStrong : Theme.border)
+        Behavior on color { ColorAnimation { duration: Theme.fast } }
+        Behavior on border.color { ColorAnimation { duration: Theme.fast } }
+        HoverHandler { id: chipHover; cursorShape: Qt.PointingHandCursor }
+        ToolTip.visible: chipHover.hovered
+        ToolTip.delay: 500
+        ToolTip.text: chip.on && chip.sameKind === 1 ? option.hint + "（至少保留一个；不需要可切换答题方式）" : option.hint
+        TapHandler {
+            onTapped: {
+                const l = chip.picked.slice()
+                if (chip.on) {
+                    if (chip.sameKind === 1)
+                        return
+                    l.splice(chip.order, 1)
+                } else {
+                    l.push(chip.option.value)
+                }
+                controller.setProviders(chip.field.id, l)
+            }
+        }
+        Row {
+            id: chipRow
+            anchors.centerIn: parent
+            spacing: 6
+            Rectangle {
+                width: 18; height: 18; radius: 9
+                anchors.verticalCenter: parent.verticalCenter
+                color: chip.on ? Theme.accent : "transparent"
+                border.color: chip.on ? Theme.accent : Theme.borderStrong
+                scale: chip.on ? 1 : 0.85
+                Behavior on scale { NumberAnimation { duration: Theme.fast; easing.type: Easing.OutBack } }
+                Text {
+                    anchors.centerIn: parent
+                    text: chip.on ? String(chip.order + 1) : ""
+                    color: Theme.accentText
+                    font.family: Theme.uiFont
+                    font.pixelSize: 10
+                    font.weight: Font.DemiBold
+                }
+            }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: chip.option.label
+                color: chip.on ? Theme.accent : Theme.text
+                font.family: Theme.uiFont
+                font.pixelSize: 13
+                font.weight: chip.on ? Font.DemiBold : Font.Normal
+            }
+        }
+    }
+
     Component {
         id: providersField
         ColumnLayout {
+            id: pf
             readonly property var field: parent ? parent.field : ({})
-            spacing: 8
-            Text { text: field.label; color: Theme.text; font.family: Theme.uiFont; font.pixelSize: 13 }
-            Flow {
+            readonly property string mode: controller.answerMode(adv.value(field.id))
+            readonly property var modeInfo: field.modes.find(m => m.value === mode) || field.modes[0]
+            spacing: 10
+
+            RowLayout {
                 Layout.fillWidth: true
-                spacing: 8
-                Repeater {
-                    model: field.options
-                    Rectangle {
-                        id: chip
-                        required property var modelData
-                        readonly property var picked: adv.listOf(field.id)
-                        readonly property int order: picked.indexOf(modelData.value)
-                        readonly property bool on: order >= 0
-                        width: chipRow.implicitWidth + 24
-                        height: 34
-                        radius: 17
-                        color: on ? Theme.accentSoft : (chipHover.hovered ? Theme.surfaceAlt : Theme.surface)
-                        border.color: on ? Theme.accent : (chipHover.hovered ? Theme.borderStrong : Theme.border)
-                        Behavior on color { ColorAnimation { duration: Theme.fast } }
-                        Behavior on border.color { ColorAnimation { duration: Theme.fast } }
-                        HoverHandler { id: chipHover; cursorShape: Qt.PointingHandCursor }
-                        ToolTip.visible: chipHover.hovered
-                        ToolTip.delay: 500
-                        ToolTip.text: modelData.hint
-                        TapHandler {
-                            onTapped: {
-                                const l = chip.picked.slice()
-                                if (chip.on) l.splice(chip.order, 1)
-                                else l.push(chip.modelData.value)
-                                controller.setAdvanced(field.id, l)
-                            }
-                        }
-                        Row {
-                            id: chipRow
-                            anchors.centerIn: parent
-                            spacing: 6
-                            Rectangle {
-                                width: 18; height: 18; radius: 9
-                                anchors.verticalCenter: parent.verticalCenter
-                                color: chip.on ? Theme.accent : "transparent"
-                                border.color: chip.on ? Theme.accent : Theme.borderStrong
-                                scale: chip.on ? 1 : 0.85
-                                Behavior on scale { NumberAnimation { duration: Theme.fast; easing.type: Easing.OutBack } }
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: chip.on ? String(chip.order + 1) : ""
-                                    color: Theme.accentText
-                                    font.family: Theme.uiFont
-                                    font.pixelSize: 10
-                                    font.weight: Font.DemiBold
-                                }
-                            }
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: chip.modelData.label
-                                color: chip.on ? Theme.accent : Theme.text
-                                font.family: Theme.uiFont
-                                font.pixelSize: 13
-                                font.weight: chip.on ? Font.DemiBold : Font.Normal
+                spacing: 16
+                Text { Layout.fillWidth: true; text: pf.field.label; color: Theme.text; font.family: Theme.uiFont; font.pixelSize: 13 }
+                Segmented {
+                    model: pf.field.modes
+                    current: pf.mode
+                    onPicked: value => controller.setAnswerMode(pf.field.id, value)
+                }
+            }
+            // What the chosen mode does.
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: modeText.implicitHeight + 18
+                radius: Theme.radius
+                color: pf.mode === "none" ? Theme.warningSoft : Theme.accentSoft
+                Behavior on color { ColorAnimation { duration: Theme.normal } }
+                Row {
+                    anchors.fill: parent
+                    anchors.margins: 9
+                    anchors.leftMargin: 12
+                    spacing: 8
+                    Text {
+                        text: pf.mode === "none" ? "" : pf.mode === "tiku" ? "" : pf.mode === "ai" ? "" : ""
+                        font.family: Theme.iconFont
+                        font.pixelSize: 14
+                        color: pf.mode === "none" ? Theme.warning : Theme.accent
+                    }
+                    Text {
+                        id: modeText
+                        width: parent.width - 30
+                        text: pf.modeInfo.hint
+                        color: pf.mode === "none" ? Theme.warning : Theme.text
+                        font.family: Theme.uiFont
+                        font.pixelSize: 12
+                        wrapMode: Text.Wrap
+                    }
+                }
+            }
+
+            Repeater {
+                model: [
+                    { kind: "tiku", title: "题库", shown: pf.mode === "tiku" || pf.mode === "both" },
+                    { kind: "ai", title: "AI 服务", shown: pf.mode === "ai" || pf.mode === "both" }
+                ]
+                ColumnLayout {
+                    required property var modelData
+                    visible: modelData.shown
+                    Layout.fillWidth: true
+                    spacing: 6
+                    Text { text: modelData.title; color: Theme.muted; font.family: Theme.uiFont; font.pixelSize: 12 }
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        Repeater {
+                            model: pf.field.options.filter(o => o.kind === modelData.kind)
+                            ProviderChip {
+                                required property var modelData
+                                field: pf.field
+                                option: modelData
                             }
                         }
                     }
                 }
             }
             Text {
+                visible: pf.mode !== "none"
                 Layout.fillWidth: true
-                text: field.hint
+                text: pf.mode === "both" ? "数字是查询顺序：先按顺序查题库，都找不到再交给 AI" : pf.field.hint
                 color: Theme.muted
                 font.family: Theme.uiFont
                 font.pixelSize: 12
