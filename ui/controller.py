@@ -637,6 +637,10 @@ class AppController(QObject):
         if not v["use_cookies"] and (not v["username"].strip() or not v["password"]):
             self.toast.emit("请在设置中填写账号和密码，或开启 cookies 登录。", "warning")
             return
+        problem = advanced.ai_config_problem(self._advanced)
+        if problem:
+            self.toast.emit(problem + "（设置 → 高级选项 → 答题来源）", "warning")
+            return
         if not self.saveConfig():
             return
         command = self._worker_command()

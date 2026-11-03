@@ -81,6 +81,19 @@ class AdvancedOptionsTest(unittest.TestCase):
         self.assertEqual(advanced.order_providers(["AI", "TikuGo", "SiliconFlow", "TikuYanxi"]),
                          "TikuGo,TikuYanxi,AI,SiliconFlow")
 
+    def test_ai_config_problem(self):
+        ok = {"tiku.provider": "AI", "tiku.endpoint": "https://api.example.com/v1", "tiku.model": "m", "tiku.key": "k"}
+        self.assertEqual(advanced.ai_config_problem(ok), "")
+        self.assertEqual(advanced.ai_config_problem({"tiku.provider": "TikuYanxi"}), "")
+        self.assertIn("接口地址", advanced.ai_config_problem({**ok, "tiku.endpoint": ""}))
+        self.assertIn("http", advanced.ai_config_problem({**ok, "tiku.endpoint": "api.example.com/v1"}))
+        self.assertIn("/chat/completions", advanced.ai_config_problem({**ok, "tiku.endpoint": "https://x/v1/chat/completions"}))
+        self.assertIn("模型", advanced.ai_config_problem({**ok, "tiku.model": " "}))
+        self.assertIn("API Key", advanced.ai_config_problem({**ok, "tiku.key": ""}))
+        # A model server on this machine needs no key.
+        self.assertEqual(advanced.ai_config_problem({**ok, "tiku.key": "", "tiku.endpoint": "http://127.0.0.1:9931/v1"}), "")
+        self.assertIn("硅基流动", advanced.ai_config_problem({"tiku.provider": "SiliconFlow", "tiku.siliconflow_key": ""}))
+
     def test_normalize(self):
         self.assertEqual(advanced.normalize("x", True), "true")
         self.assertEqual(advanced.normalize("x", False), "false")

@@ -28,6 +28,10 @@ except ImportError:
         pass
 
 
+class UserCancelled(Exception):
+    """The user chose not to continue at a prompt; exit quietly, it is not an error."""
+
+
 class ChapterResult(enum.Enum):
     SUCCESS = 0,
     ERROR = 1,
@@ -240,7 +244,7 @@ def init_chaoxing(common_config, tiku_config, config_path=None):
                 choice = input('大模型连接检查失败，无法准确答题，是否继续运行？(Y/n): ').strip().lower()
                 # 直接回车默认继续运行
                 if choice not in ('', 'y', 'yes'):
-                    raise RuntimeError('用户取消运行')
+                    raise UserCancelled('大模型连接检查未通过，已按你的选择停止运行。请在 设置 → 高级选项 → 答题来源 中检查接口地址、API Key 和模型名称')
                 logger.info('用户选择继续运行...')
 
     query_delay = tiku_config.get("delay", 0)
@@ -615,6 +619,9 @@ def main():
             logger.info("所有课程章节学习次数增加完成")
             notification.send("chaoxing : 所有课程章节学习次数增加完成")
         
+    except UserCancelled as e:
+        logger.warning(str(e))
+        sys.exit(0)
     except SystemExit as e:
         if e.code != 0:
             logger.error(f"错误: 程序异常退出, 返回码: {e.code}")

@@ -13,6 +13,7 @@ from re import sub
 from typing import Optional
 
 import httpx
+import openai
 import requests
 from openai import OpenAI
 from urllib3 import disable_warnings, exceptions
@@ -1209,6 +1210,54 @@ class AI(Tiku):
             kwargs['extra_body'] = {'thinking': {'type': 'disabled'}}
         return kwargs
 
+    def _is_local_endpoint(self) -> bool:
+        try:
+            host = (httpx.URL(self.endpoint or '').host or '').lower()
+        except Exception:
+            return False
+        return host in ('localhost', '::1') or host.startswith('127.')
+
+    def _make_client(self) -> OpenAI:
+        """OpenAI client for the configured endpoint.
+
+        A model server on this machine (llama.cpp, Ollama, LM Studio...) is reached
+        directly: sending it through ``http_proxy`` makes it answer 404, and it usually
+        needs no key, so an empty key is replaced with a placeholder for it.
+        """
+        local = self._is_local_endpoint()
+        key = (self.key or '').strip()
+        if not key:
+            if not local:
+                raise ValueError('未填写 API Key（设置 → 高级选项 → 答题来源）')
+            key = 'no-key'
+        if self.http_proxy and not local:
+            return OpenAI(http_client=httpx.Client(proxy=self.http_proxy), base_url=self.endpoint, api_key=key)
+        if self.http_proxy and not getattr(self, '_proxy_note_shown', False):
+            self._proxy_note_shown = True
+            logger.info(f'{self.name}: 接口地址在本机，已忽略代理设置 {self.http_proxy}')
+        return OpenAI(base_url=self.endpoint, api_key=key)
+
+    def _explain_error(self, e: Exception) -> str:
+        """Plain-language reason for a failed request, with the original message."""
+        if isinstance(e, openai.AuthenticationError):
+            reason = 'API Key 不正确或已失效（401）'
+        elif isinstance(e, openai.NotFoundError):
+            reason = (f'接口地址或模型不存在（404）：确认接口地址 {self.endpoint} 正确（通常以 /v1 结尾，'
+                      f'不要带 /chat/completions），模型名称 {self.model!r} 存在')
+            if self.http_proxy and not self._is_local_endpoint():
+                reason += f'；也检查代理 {self.http_proxy} 是否可用'
+        elif isinstance(e, openai.PermissionDeniedError):
+            reason = '没有权限使用这个模型（403）'
+        elif isinstance(e, openai.RateLimitError):
+            reason = '请求太频繁或额度不足（429）'
+        elif isinstance(e, openai.APITimeoutError):
+            reason = f'连接 {self.endpoint} 超时'
+        elif isinstance(e, openai.APIConnectionError):
+            reason = f'连不上 {self.endpoint}：检查地址、端口，以及模型服务是否已启动'
+        else:
+            return str(e)
+        return f'{reason}。原始信息：{e}'
+
     def _wait_for_interval(self):
         if self.last_request_time:
             interval_time = time.time() - self.last_request_time
@@ -1228,12 +1277,7 @@ class AI(Tiku):
             match = re.search(pattern, md_str, re.DOTALL)
             return match.group(1).strip() if match else md_str.strip()
 
-        if self.http_proxy:
-            proxy = self.http_proxy
-            httpx_client = httpx.Client(proxy=proxy)
-            client = OpenAI(http_client=httpx_client, base_url=self.endpoint, api_key=self.key)
-        else:
-            client = OpenAI(base_url=self.endpoint, api_key=self.key)
+        client = self._make_client()
         # 去除选项字母，防止大模型直接输出字母而非内容
         options_list = q_info['options'].split('\n')
         cleaned_options = [re.sub(r"^[A-Z]\s*", "", option) for option in options_list]
@@ -1333,11 +1377,10 @@ class AI(Tiku):
             logger.info(f'正在检查 {self.name} 连接...')
             try:
                 # 初始化客户端
-                if self.http_proxy:
-                    httpx_client = httpx.Client(proxy=self.http_proxy)
-                    client = OpenAI(http_client=httpx_client, base_url=self.endpoint, api_key=self.key)
-                else:
-                    client = OpenAI(base_url=self.endpoint, api_key=self.key)
+                if not (self.endpoint or '').strip():
+                    logger.error(f'{self.name} 连接检查失败：未填写接口地址（设置 → 高级选项 → 答题来源）')
+                    return False
+                client = self._make_client()
 
                 # 限流等待
                 self._wait_for_interval()
@@ -1366,7 +1409,7 @@ class AI(Tiku):
                 return False
 
             except Exception as e:
-                logger.error(f'{self.name} 连接检查失败：{e}')
+                logger.error(f'{self.name} 连接检查失败：{self._explain_error(e)}')
                 return False
 
 class SiliconFlow(Tiku):

@@ -117,9 +117,11 @@ GROUPS: list[dict] = [
             _f("tiku", "", "heading", "OpenAI 兼容接口", show={"key": "tiku.provider", "has": ["AI"]}),
             _f("tiku", "endpoint", "text", "接口地址", "", "通常要带 /v1，例如 https://api.example.com/v1",
                show={"key": "tiku.provider", "has": ["AI"]}),
-            _f("tiku", "key", "secret", "API Key", "", show={"key": "tiku.provider", "has": ["AI"]}),
+            _f("tiku", "key", "secret", "API Key", "", "本机运行的模型服务（127.0.0.1 / localhost）可以留空",
+               show={"key": "tiku.provider", "has": ["AI"]}),
             _f("tiku", "model", "text", "模型名称", "", show={"key": "tiku.provider", "has": ["AI"]}),
-            _f("tiku", "http_proxy", "text", "代理", "", "可选，例如 http://127.0.0.1:7890",
+            _f("tiku", "http_proxy", "text", "代理", "",
+               "可选，只在访问外网接口需要翻墙时填写，例如 http://127.0.0.1:7890。不要填模型服务自己的地址；接口在本机时会自动忽略",
                show={"key": "tiku.provider", "has": ["AI"]}),
             _f("tiku", "", "heading", "硅基流动", show={"key": "tiku.provider", "has": ["SiliconFlow"]}),
             _f("tiku", "siliconflow_key", "secret", "API Key", "",
@@ -172,6 +174,36 @@ GROUPS: list[dict] = [
 
 # Template placeholders that mean "not filled in".
 _PLACEHOLDERS = {"xxx", "xxxxxx"}
+
+
+def _is_local(url: str) -> bool:
+    from urllib.parse import urlsplit
+
+    try:
+        host = (urlsplit(url.strip()).hostname or "").lower()
+    except ValueError:
+        return False
+    return host in ("localhost", "::1") or host.startswith("127.")
+
+
+def ai_config_problem(values: dict[str, str]) -> str:
+    """Why an AI-based answer mode cannot work with these settings, or "" if it looks usable."""
+    picked = _split(values.get("tiku.provider", ""))
+    if "AI" in picked:
+        endpoint = values.get("tiku.endpoint", "").strip()
+        if not endpoint:
+            return "答题方式用到了 AI，但还没填写接口地址"
+        if not endpoint.lower().startswith(("http://", "https://")):
+            return "AI 接口地址要以 http:// 或 https:// 开头"
+        if endpoint.rstrip("/").lower().endswith("/chat/completions"):
+            return "AI 接口地址不要带 /chat/completions，填到 /v1 即可"
+        if not values.get("tiku.model", "").strip():
+            return "答题方式用到了 AI，但还没填写模型名称"
+        if not values.get("tiku.key", "").strip() and not _is_local(endpoint):
+            return "答题方式用到了 AI，但还没填写 API Key"
+    if "SiliconFlow" in picked and not values.get("tiku.siliconflow_key", "").strip():
+        return "答题方式用到了硅基流动，但还没填写 API Key"
+    return ""
 
 
 def fields() -> list[dict]:
