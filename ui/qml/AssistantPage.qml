@@ -200,7 +200,7 @@ Item {
                         Layout.fillWidth: true
                         spacing: 2
                         Text { text: nf.label; color: Theme.muted; font.family: Theme.uiFont; font.pixelSize: 11 }
-                        SpinBox {
+                        AppSpinBox {
                             Layout.fillWidth: true
                             from: nf.from
                             to: nf.to

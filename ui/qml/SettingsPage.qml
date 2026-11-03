@@ -143,7 +143,7 @@ Item {
                         label: "重试间隔"
                         hint: "任务失败或章节未开放时，等待多少秒后重试"
                         enabled: !controller.running
-                        SpinBox {
+                        AppSpinBox {
                             from: 0
                             to: 600
                             stepSize: 5
@@ -195,7 +195,7 @@ Item {
                         label: "目标总次数"
                         enabled: controller.addLearningCount
                         opacity: enabled ? 1 : 0.5
-                        SpinBox {
+                        AppSpinBox {
                             from: 1
                             to: 10000
                             editable: true

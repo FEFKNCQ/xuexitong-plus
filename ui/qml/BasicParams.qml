@@ -59,13 +59,13 @@ Card {
 
         Label { text: "视频速度"; color: Theme.muted; font.pixelSize: 12 }
         Label { text: "并行章节数"; color: Theme.muted; font.pixelSize: 12 }
-        ComboBox {
+        AppComboBox {
             Layout.fillWidth: true
             model: controller.speedOptions.map(v => v === "1" ? "标准 · 1×" : v + "×")
             currentIndex: Math.max(0, controller.speedOptions.indexOf(controller.speed))
             onActivated: index => controller.speed = controller.speedOptions[index]
         }
-        SpinBox {
+        AppSpinBox {
             Layout.fillWidth: true
             from: 1
             to: 8
@@ -74,7 +74,7 @@ Card {
         }
 
         Label { text: "未开放章节"; color: Theme.muted; font.pixelSize: 12; Layout.columnSpan: 2 }
-        ComboBox {
+        AppComboBox {
             Layout.columnSpan: 2
             Layout.fillWidth: true
             readonly property var values: ["retry", "continue"]
