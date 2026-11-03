@@ -115,8 +115,11 @@ def video_source_html(source: str) -> str:
         </script></body></html>"""
 
 
-def build_work_view(data: dict) -> dict:
-    """Shape a ``__CX_WORK_PREVIEW__`` payload into plain data for QML."""
+def build_work_view(data: dict, pending: bool = False) -> dict:
+    """Shape a ``__CX_WORK_PREVIEW__`` payload into plain data for QML.
+
+    ``pending``: the questions were just read and answers are still being looked up.
+    """
     questions = []
     for raw in data.get("questions") or []:
         if not isinstance(raw, dict):
@@ -141,11 +144,13 @@ def build_work_view(data: dict) -> dict:
             "options": options,
             "answerText": answer if not options else "",
             "fromBank": raw.get("source") == "cover",
+            "pending": pending,
         })
     return {
         "title": str(data.get("title", "") or "章节检测"),
         "coverRate": int(data.get("cover_rate", 0) or 0),
         "submit": bool(data.get("submit", False)),
+        "pending": pending,
         "questions": questions,
     }
 
@@ -779,7 +784,10 @@ class AppController(QObject):
     def _handle_work(self, event: WorkPreviewEvent) -> None:
         if not event.valid:
             return
-        if event.phase == "filled":
+        if event.phase == "questions":
+            self._work = build_work_view(event.data, pending=True)
+            self._work_status = "正在查找答案"
+        elif event.phase == "filled":
             self._work = build_work_view(event.data)
             self._work_status = "正在提交" if self._work["submit"] else "仅保存，不提交"
         elif event.phase in ("submitted", "saved"):

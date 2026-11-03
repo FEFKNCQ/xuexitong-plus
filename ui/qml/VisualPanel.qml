@@ -81,7 +81,9 @@ Card {
                 elide: Text.ElideRight
             }
             Text {
-                text: card.hasWork ? "共 " + card.work.questions.length + " 题 · 题库覆盖率 " + card.work.coverRate + "%" : "运行到章节检测时，下方会显示题目和填写的答案"
+                text: !card.hasWork ? "运行到章节检测时，下方会显示题目和填写的答案"
+                    : card.work.pending ? "共 " + card.work.questions.length + " 题 · 正在查找答案"
+                    : "共 " + card.work.questions.length + " 题 · 题库覆盖率 " + card.work.coverRate + "%"
                 color: Theme.muted
                 font.family: Theme.uiFont
                 font.pixelSize: 11

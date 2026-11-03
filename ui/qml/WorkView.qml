@@ -46,7 +46,8 @@ Rectangle {
                     elide: Text.ElideRight
                 }
                 Text {
-                    text: root.hasWork ? "共 " + root.work.questions.length + " 题 · 题库覆盖率 " + root.work.coverRate + "%" : ""
+                    text: !root.hasWork ? "" : root.work.pending ? "共 " + root.work.questions.length + " 题 · 正在查找答案"
+                        : "共 " + root.work.questions.length + " 题 · 题库覆盖率 " + root.work.coverRate + "%"
                     color: Theme.muted
                     font.family: Theme.uiFont
                     font.pixelSize: 12

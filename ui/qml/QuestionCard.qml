@@ -53,7 +53,7 @@ Rectangle {
             Item { Layout.fillWidth: true }
             Rectangle {
                 radius: 4
-                color: card.question.fromBank ? Theme.successSoft : Theme.warningSoft
+                color: card.question.pending ? Theme.sunken : card.question.fromBank ? Theme.successSoft : Theme.warningSoft
                 implicitWidth: srcText.implicitWidth + 12
                 implicitHeight: 20
                 opacity: card.revealed ? 1 : 0
@@ -62,8 +62,8 @@ Rectangle {
                 Text {
                     id: srcText
                     anchors.centerIn: parent
-                    text: card.question.fromBank ? "题库匹配" : "随机作答"
-                    color: card.question.fromBank ? Theme.success : Theme.warning
+                    text: card.question.pending ? "查找中" : card.question.fromBank ? "题库匹配" : "随机作答"
+                    color: card.question.pending ? Theme.muted : card.question.fromBank ? Theme.success : Theme.warning
                     font.family: Theme.uiFont
                     font.pixelSize: 11
                 }
