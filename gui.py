@@ -115,6 +115,8 @@ def main() -> None:
     exit_code = app.exec()
     if startup.controller is not None:
         startup.controller.shutdown()
+    if startup.ai is not None:
+        startup.ai.shutdown()   # stops a llama-server we started
     if startup.tray is not None:
         startup.tray.shutdown()
     del engine

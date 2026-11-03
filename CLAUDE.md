@@ -19,7 +19,16 @@
 - `ui/uninstall.py` + `ui/qml/Uninstall.qml`：卸载程序就是 `学习通PLUS.exe --uninstall`（`--quiet` 无界面，默认清除账号数据，`--keep-account` 保留）。删除快捷方式和注册表项；“清除账号数据”默认勾选（清空 config.ini 的账号密码、关闭 cookies 登录、删除 cookies.txt），也可删除整个 `%APPDATA%\ChaoxingDesktop` 和 QSettings。退出后由 cmd 延迟删除程序目录。
 - `ui/updater.py` + `ui/qml/UpdateDialog.qml`：联网更新。查询 `Kerxs/XueXiTong-Plus` 的 latest release，找文件名含 setup 的 `.exe` 资源，下载到 `%TEMP%\xxtplus-update`，用 GitHub 提供的 `digest`（sha256）校验后启动安装程序并退出。仓库名改了要同步改 `REPO`。只有打包版会在启动时自动检查（`XXTPLUS_UPDATE_CHECK=1` 可在开发时强制）。发布新版本：改 `APP_VERSION` → 构建 → 新建 tag `v<版本>` 的 Release，上传 Setup.exe（和 zip）。发行文件名必须是 ASCII（`XueXiTong-Plus-…`）：GitHub 会删掉资源名里的中文字符。
 - `packaging/app.spec` / `packaging/setup.spec` / `packaging/prune.py`：PyInstaller 打包。GUI 和 worker 打进同一个目录，共用一个 `_internal`（worker 不再是单文件，启动任务时不用解压）。`prune.py` 去掉不用的 Qt 模块（3D、Charts、多媒体、其他控件样式、翻译、软件 OpenGL 等）、ddddocr 不加载的两个模型、OpenCV 的 ffmpeg。注意 `PySide6.QtQuick` 依赖 `QtOpenGL.pyd`，不能删。改了裁剪规则后要跑 `tests/test_packaging_and_cleanup.py` 并启动打包版看 `gui.log`。
-- 设置页的界面偏好（主题、动画、启动动画、运行结束提醒、自动检查更新）都存 QSettings；`Theme.motion` 为 false 时所有 `Theme.fast/normal/slow` 变成 0。
+- 设置页的界面偏好（主题、动画、启动动画、运行结束提醒、自动检查更新、关闭到托盘）都存 QSettings；`Theme.motion` 为 false 时所有 `Theme.fast/normal/slow` 变成 0，循环动画也停止。
+- `ui/localai.py` + `ui/assistant.py` + `ui/qml/AssistantPage.qml`：“AI 讲解”页，本地 GGUF 模型（llama.cpp 的 `llama-server`）讲解题目。
+  - 边界：输出只在这个页面里给用户看；**不写回任务进程、不进入 `config.ini` 的 `[tiku]`、不参与任何自动作答或提交**。设置存 `%APPDATA%\ChaoxingDesktop\local_ai.json`，审核历史存 `ai_history.json`。不下载模型。
+  - 人工审核：每条结果先是“待审核”；只有用户标记“采纳”的结果能复制（`copyAnswer` 会拒绝其他状态）；可写审核备注。
+  - 两种模式：本机启动 llama-server（自动检测：设置路径 → PATH → 常见安装目录，运行 `--version`），或连接已运行的 OpenAI 兼容服务。参数：模型 / mmproj 路径、端口、上下文、GPU 层数、线程、温度、最大 token、额外参数。用 `/health` 等待模型加载，`/v1/chat/completions` 流式推理；停止时结束整个进程树。
+  - 题目来源：当前章节检测（来自运行面板的预览数据，自动带上识别到的课程和章节）、手动粘贴（自动拆出题干和选项）、图片（需要 mmproj，多模态）。
+  - 测试：`tests/test_localai.py` 用 `tests/fake_llama_server.py` 模拟 llama-server，覆盖检测、启动、加载等待、连接测试、流式推理、错误、崩溃退出、审核门槛。
+- `ui/videoproxy.py`：视频预览的本地代理（只监听 127.0.0.1，只代理已登记的 `*.chaoxing.com` 地址）。WebView2 的 `loadHtml()` 实际是 data: URL，CDN 收不到学习通的 Referer 会拒绝视频；现在预览页面和视频都由代理提供，代理转发时带上 Referer 并透传 Range。
+- `ui/tray.py`：后台模式（系统托盘 + 单实例）。关闭窗口默认隐藏到托盘，任务继续；再次启动程序会唤出已运行的窗口。所有真正退出的路径都走 `Main.qml` 的 `quitApp()`。
+- 编码：打包版 worker 不认 `PYTHONUTF8`，`worker.py` 启动时强制 stdout/stderr 为 UTF-8；GUI 用 `StreamDecoder` 增量解码，遇到非 UTF-8 自动改用 GB18030。
 - 运行日志和设置界面里不显示本机完整路径（统一写 `%APPDATA%\ChaoxingDesktop`），避免截图泄露用户名。
 - `ui/controller.py`：`AppController`，暴露给 QML 的 `controller`。负责 `config.ini` 读写、启动/停止 worker、写 worker 标准输入（课程选择、Y/n 确认）、主题和预览数据。
 - `ui/output_parser.py`：把 worker 输出解析成事件（loguru 日志、tqdm 进度、课程列表、输入提示、预览事件）。纯 Python，无 Qt 依赖。
