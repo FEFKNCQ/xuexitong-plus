@@ -37,7 +37,7 @@ from ui.output_parser import (
 )
 
 APP_NAME = "学习通PLUS"
-APP_VERSION = "3.2.0"
+APP_VERSION = "1.0.0"
 ROOT_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 BUNDLE_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else ROOT_DIR
 
