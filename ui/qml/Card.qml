@@ -30,8 +30,12 @@ Rectangle {
 
     color: Theme.surface
     radius: Theme.radiusLarge
-    border.color: Theme.border
+    // Border darkens slightly on hover; colours fade when the theme changes.
+    border.color: cardHover.hovered ? Theme.borderStrong : Theme.border
     border.width: 1
+    Behavior on color { ColorAnimation { duration: Theme.slow } }
+    Behavior on border.color { ColorAnimation { duration: Theme.fast } }
+    HoverHandler { id: cardHover }
     implicitHeight: column.implicitHeight + padding * 2
 
     ColumnLayout {

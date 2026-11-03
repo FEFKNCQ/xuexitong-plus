@@ -10,6 +10,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QtMsgType, qInfo, qInstallMessageHandler
 from PySide6.QtGui import QFont, QGuiApplication, QIcon
+from PySide6.QtWidgets import QApplication
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtWebView import QtWebView
@@ -75,7 +76,8 @@ def main() -> None:
     QGuiApplication.setApplicationName(APP_NAME)
     QGuiApplication.setOrganizationName("ChaoxingDesktop")
     QtWebView.initialize()
-    app = QGuiApplication(sys.argv)
+    # QApplication (not QGuiApplication): the tray icon and its menu are widgets.
+    app = QApplication(sys.argv)
     app.setWindowIcon(QIcon(str(ROOT_DIR / "assets" / "learning_plus.png")))
     app.setFont(QFont("Microsoft YaHei UI", 10))
 
@@ -99,12 +101,22 @@ def main() -> None:
         del engine
         raise SystemExit(exit_code)
 
+    # Already running (perhaps hidden in the tray)? Bring that window up instead.
+    from ui.tray import activate_running_instance
+
+    if activate_running_instance():
+        raise SystemExit(0)
+    # Closing the window hides it to the tray; the app quits explicitly (tray menu / 退出).
+    app.setQuitOnLastWindowClosed(False)
+
     # Splash first; config, runtime checks and the main window load behind it.
     startup = StartupLoader(app, engine)
     startup.start()
     exit_code = app.exec()
     if startup.controller is not None:
         startup.controller.shutdown()
+    if startup.tray is not None:
+        startup.tray.shutdown()
     del engine
     raise SystemExit(exit_code)
 

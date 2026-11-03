@@ -37,7 +37,7 @@ from ui.output_parser import (
 )
 
 APP_NAME = "学习通PLUS"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 ROOT_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 BUNDLE_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else ROOT_DIR
 
@@ -159,7 +159,6 @@ class AppController(QObject):
     dashboardChanged = Signal()
     videoChanged = Signal()
     workChanged = Signal()
-    visualModeChanged = Signal()
     themeChanged = Signal()
     toast = Signal(str, str)  # message, kind
     courseSelectionRequested = Signal("QVariantList")
@@ -184,11 +183,11 @@ class AppController(QObject):
         self._task = ""
         self._completed = 0
         self._video_html = video_message_html("等待视频任务开始")
+        self._video_message = "等待视频任务开始"
         self._video_title = ""
         self._video_active = False
         self._work: dict = {}
         self._work_status = ""
-        self._visual_mode = "video"
         self._theme = str(self._settings.value("ui/theme", "system"))
         self._clock = QTimer(self)
         self._clock.setInterval(1000)
@@ -286,6 +285,23 @@ class AppController(QObject):
     def openDataDir(self) -> None:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(DATA_DIR)))
+
+    @Slot()
+    def openConfigFile(self) -> None:
+        """Open config.ini in the system's default editor (created from the template if missing)."""
+        if not CONFIG_PATH.exists():
+            load_config()
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(CONFIG_PATH))):
+            self.toast.emit("无法打开配置文件，请在配置目录中手动打开 config.ini。", "warning")
+
+    @Slot()
+    def reloadConfig(self) -> None:
+        """Re-read config.ini after it was edited outside the app."""
+        if self._process is not None:
+            self.toast.emit("任务运行中，停止后再重新载入配置。", "warning")
+            return
+        self.revertConfig()
+        self.toast.emit("已重新载入配置文件。", "info")
 
     # ----- theme ---------------------------------------------------------
     def _apply_theme(self) -> None:
@@ -512,7 +528,7 @@ class AppController(QObject):
         self._work = {}
         self._work_status = ""
         self.workChanged.emit()
-        self._set_video(video_message_html("等待视频任务开始"), "", False)
+        self._set_video(video_message_html("等待视频任务开始"), "", False, "等待视频任务开始")
         self.dashboardChanged.emit()
         self._set_status("正在运行", "running")
         self._log("INFO", "任务进程已启动。")
@@ -576,12 +592,11 @@ class AppController(QObject):
             self._task_model.upsert(event.name, percent=event.percent, detail=f"{event.done} / {event.total}")
         elif isinstance(event, VideoPreviewEvent):
             if not event.valid:
-                self._set_video(video_message_html("无法读取当前视频预览"), "", False)
+                self._set_video(video_message_html("无法读取当前视频预览"), "", False, "无法读取当前视频预览")
             elif event.source:
-                self._set_video(video_source_html(event.source), event.title, True)
+                self._set_video(video_source_html(event.source), event.title, True, "")
             else:
-                self._set_video(video_message_html("当前章节没有可显示的视频流"), event.title, False)
-            self._set_visual_mode("video")
+                self._set_video(video_message_html("当前章节没有可显示的视频流"), event.title, False, "当前章节没有可显示的视频流")
         elif isinstance(event, WorkPreviewEvent):
             self._handle_work(event)
         elif isinstance(event, CourseListEvent):
@@ -595,7 +610,6 @@ class AppController(QObject):
         if event.phase == "filled":
             self._work = build_work_view(event.data)
             self._work_status = "正在提交" if self._work["submit"] else "仅保存，不提交"
-            self._set_visual_mode("work")
         elif event.phase in ("submitted", "saved"):
             self._work_status = "已提交" if event.phase == "submitted" else "已保存"
             self._completed += 1
@@ -614,15 +628,16 @@ class AppController(QObject):
             self._process.deleteLater()
         self._process = None
         self._set_status("已完成" if ok else "已退出", "done" if ok else "error")
-        self._set_video(video_message_html("视频任务已结束", "下次运行时会继续显示当前视频"), "", False)
+        self._set_video(video_message_html("视频任务已结束", "下次运行时会继续显示当前视频"), "", False, "视频任务已结束")
 
     def _on_error(self, error) -> None:
         if self._process and error != QProcess.ProcessError.Crashed:
             self._log("ERROR", f"任务进程错误：{self._process.errorString()}")
 
     # ----- visual panel --------------------------------------------------
-    def _set_video(self, markup: str, title: str, active: bool) -> None:
+    def _set_video(self, markup: str, title: str, active: bool, message: str = "") -> None:
         self._video_html = markup
+        self._video_message = message
         self._video_title = title
         self._video_active = active
         self.videoChanged.emit()
@@ -630,16 +645,7 @@ class AppController(QObject):
     videoHtml = Property(str, lambda self: self._video_html, notify=videoChanged)
     videoTitle = Property(str, lambda self: self._video_title, notify=videoChanged)
     videoActive = Property(bool, lambda self: self._video_active, notify=videoChanged)
+    videoMessage = Property(str, lambda self: self._video_message, notify=videoChanged)
     videoBaseUrl = Property(str, lambda self: VIDEO_BASE_URL, constant=True)
     work = Property("QVariantMap", lambda self: self._work, notify=workChanged)
     workStatus = Property(str, lambda self: self._work_status, notify=workChanged)
-
-    def _set_visual_mode(self, mode: str) -> None:
-        if mode != self._visual_mode:
-            self._visual_mode = mode
-            self.visualModeChanged.emit()
-
-    def _get_visual_mode(self) -> str:
-        return self._visual_mode
-
-    visualMode = Property(str, _get_visual_mode, _set_visual_mode, notify=visualModeChanged)

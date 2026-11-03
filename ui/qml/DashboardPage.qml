@@ -24,16 +24,40 @@ Item {
 
         // ---------- left: dashboard + basic parameters ----------
         ColumnLayout {
+            id: leftCol
+            // Log height: expanded it takes what the fixed parts leave (keeping 190 for tasks),
+            // collapsed just its header. `logOpen` animates 0..1 so only toggling animates,
+            // not window resizing.
+            readonly property real fixedHeight: headerRow.height + accountBanner.height + tiles.height
+                + params.height + 4 * spacing
+            readonly property real logExpanded: Math.max(160, height - fixedHeight - 190 - spacing)
+            readonly property real logCollapsed: 64
+            property real logOpen: log.expanded ? 1 : 0
+            Behavior on logOpen { NumberAnimation { duration: Theme.slow; easing.type: Easing.InOutCubic } }
             Layout.preferredWidth: Math.max(470, page.width * 0.44)
             Layout.maximumWidth: 640
             Layout.fillHeight: true
             spacing: Theme.gap
 
             RowLayout {
+                id: headerRow
                 Layout.fillWidth: true
                 spacing: 10
                 ColumnLayout {
                     spacing: 2
+                    // Title lifts in each time the page is shown.
+                    transform: Translate { id: titleShift; y: 0 }
+                    opacity: 1
+                    id: titleBlock
+                    Connections {
+                        target: page
+                        function onVisibleChanged() { if (page.visible && Theme.motion) titleIn.restart() }
+                    }
+                    ParallelAnimation {
+                        id: titleIn
+                        NumberAnimation { target: titleShift; property: "y"; from: 10; to: 0; duration: Theme.slow; easing.type: Easing.OutCubic }
+                        NumberAnimation { target: titleBlock; property: "opacity"; from: 0; to: 1; duration: Theme.slow }
+                    }
                     Text { text: "运行面板"; color: Theme.text; font.family: Theme.uiFont; font.pixelSize: 22; font.weight: Font.DemiBold }
                     Text {
                         text: controller.useCookies ? "使用 cookies 登录" : (controller.username !== "" ? "账号 " + controller.username : "尚未填写账号")
@@ -116,6 +140,7 @@ Item {
             }
 
             GridLayout {
+                id: tiles
                 Layout.fillWidth: true
                 columns: 4
                 columnSpacing: 10
@@ -126,19 +151,19 @@ Item {
                 StatTile { Layout.fillWidth: true; Layout.preferredWidth: 1; appearDelay: 210; label: "运行时长"; icon: ""; value: controller.running || controller.completedCount > 0 ? controller.elapsed : ""; placeholder: "00:00" }
             }
 
-            BasicParams { Layout.fillWidth: true; appearDelay: 260 }
+            BasicParams { id: params; Layout.fillWidth: true; appearDelay: 260 }
 
             TaskList {
                 Layout.fillWidth: true
-                Layout.preferredHeight: log.expanded ? 190 : 0
-                Layout.fillHeight: !log.expanded
+                Layout.fillHeight: true
+                Layout.minimumHeight: 120
                 appearDelay: 320
             }
 
             LogPanel {
                 id: log
                 Layout.fillWidth: true
-                Layout.fillHeight: expanded
+                Layout.preferredHeight: leftCol.logCollapsed + (leftCol.logExpanded - leftCol.logCollapsed) * leftCol.logOpen
                 appearDelay: 380
             }
         }

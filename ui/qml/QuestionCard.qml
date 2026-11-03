@@ -6,10 +6,23 @@ import "."
 Rectangle {
     id: card
     property var question: ({})
+    // When this card's answer is revealed (after its entrance), in ms.
+    property int revealDelay: 0
+    property bool revealed: !Theme.motion
+
     radius: Theme.radius
     color: Theme.surfaceAlt
-    border.color: Theme.border
+    border.color: hover.hovered ? Theme.borderStrong : Theme.border
     implicitHeight: column.implicitHeight + 24
+    Behavior on color { ColorAnimation { duration: Theme.slow } }
+    Behavior on border.color { ColorAnimation { duration: Theme.fast } }
+    HoverHandler { id: hover }
+
+    Timer {
+        interval: Math.max(1, card.revealDelay + 260)
+        running: !card.revealed
+        onTriggered: card.revealed = true
+    }
 
     ColumnLayout {
         id: column
@@ -25,6 +38,7 @@ Rectangle {
             Text {
                 text: card.question.index + "."
                 color: Theme.text
+                font.family: Theme.uiFont
                 font.pixelSize: 13
                 font.weight: Font.DemiBold
             }
@@ -33,7 +47,8 @@ Rectangle {
                 color: Theme.accentSoft
                 implicitWidth: typeText.implicitWidth + 12
                 implicitHeight: 20
-                Text { id: typeText; anchors.centerIn: parent; text: card.question.typeLabel || ""; color: Theme.accent; font.pixelSize: 11 }
+                Behavior on color { ColorAnimation { duration: Theme.slow } }
+                Text { id: typeText; anchors.centerIn: parent; text: card.question.typeLabel || ""; color: Theme.accent; font.family: Theme.uiFont; font.pixelSize: 11 }
             }
             Item { Layout.fillWidth: true }
             Rectangle {
@@ -41,11 +56,15 @@ Rectangle {
                 color: card.question.fromBank ? Theme.successSoft : Theme.warningSoft
                 implicitWidth: srcText.implicitWidth + 12
                 implicitHeight: 20
+                opacity: card.revealed ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: Theme.normal } }
+                Behavior on color { ColorAnimation { duration: Theme.slow } }
                 Text {
                     id: srcText
                     anchors.centerIn: parent
                     text: card.question.fromBank ? "题库匹配" : "随机作答"
                     color: card.question.fromBank ? Theme.success : Theme.warning
+                    font.family: Theme.uiFont
                     font.pixelSize: 11
                 }
             }
@@ -55,6 +74,7 @@ Rectangle {
             Layout.fillWidth: true
             text: card.question.title || ""
             color: Theme.text
+            font.family: Theme.uiFont
             font.pixelSize: 13
             wrapMode: Text.Wrap
             textFormat: Text.PlainText
@@ -63,33 +83,36 @@ Rectangle {
         Repeater {
             model: card.question.options || []
             Rectangle {
+                id: option
                 required property var modelData
+                readonly property bool marked: card.revealed && modelData.selected
                 Layout.fillWidth: true
                 implicitHeight: optText.implicitHeight + 14
                 radius: 6
-                property bool marked: false
                 color: marked ? Theme.accentSoft : Theme.surface
                 border.color: marked ? Theme.accent : Theme.border
                 Behavior on color { ColorAnimation { duration: Theme.slow } }
                 Behavior on border.color { ColorAnimation { duration: Theme.slow } }
-                Timer { interval: 420; running: modelData.selected; onTriggered: parent.marked = true }
                 RowLayout {
                     anchors.fill: parent
                     anchors.leftMargin: 10
                     anchors.rightMargin: 10
                     spacing: 8
                     Text {
-                        text: parent.parent.marked ? "" : ""
+                        text: option.marked ? "" : ""
                         font.family: Theme.iconFont
                         font.pixelSize: 13
-                        color: parent.parent.marked ? Theme.accent : Theme.faint
+                        color: option.marked ? Theme.accent : Theme.faint
+                        scale: option.marked ? 1 : 0.92
                         Behavior on color { ColorAnimation { duration: Theme.slow } }
+                        Behavior on scale { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutBack } }
                     }
                     Text {
                         id: optText
                         Layout.fillWidth: true
                         text: modelData.text
                         color: Theme.text
+                        font.family: Theme.uiFont
                         font.pixelSize: 12
                         wrapMode: Text.Wrap
                         textFormat: Text.PlainText
@@ -98,20 +121,37 @@ Rectangle {
             }
         }
 
+        // Fill-in / short answers type out character by character.
         Rectangle {
+            id: answerBox
+            readonly property string full: card.question.answerText || ""
+            property int shown: 0
             visible: (card.question.options || []).length === 0
             Layout.fillWidth: true
             implicitHeight: answerText.implicitHeight + 14
             radius: 6
             color: Theme.surface
-            border.color: Theme.border
+            border.color: answerBox.full !== "" && answerBox.shown > 0 ? Theme.accent : Theme.border
+            Behavior on color { ColorAnimation { duration: Theme.slow } }
+            Behavior on border.color { ColorAnimation { duration: Theme.slow } }
+            onFullChanged: shown = Theme.motion ? 0 : full.length
+            Component.onCompleted: shown = Theme.motion ? 0 : full.length
+            Timer {
+                // Short answers type at a steady pace; long ones finish within about 1.2 s.
+                interval: Math.max(16, Math.min(45, 1200 / Math.max(1, answerBox.full.length)))
+                repeat: true
+                running: card.revealed && answerBox.visible && answerBox.shown < answerBox.full.length
+                onTriggered: answerBox.shown += 1
+            }
             Text {
                 id: answerText
                 anchors.fill: parent
                 anchors.margins: 7
                 anchors.leftMargin: 10
-                text: card.question.answerText ? card.question.answerText : "（未填写）"
-                color: card.question.answerText ? Theme.text : Theme.faint
+                text: answerBox.full !== "" ? answerBox.full.substring(0, answerBox.shown) + (answerBox.shown < answerBox.full.length ? "▍" : "")
+                                            : "（未填写）"
+                color: answerBox.full !== "" ? Theme.text : Theme.faint
+                font.family: Theme.uiFont
                 font.pixelSize: 12
                 wrapMode: Text.Wrap
                 textFormat: Text.PlainText

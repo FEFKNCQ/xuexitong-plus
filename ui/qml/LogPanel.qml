@@ -6,6 +6,8 @@ import "."
 Card {
     id: card
     property bool expanded: true
+    // Collapsing is animated by the dashboard (it owns the height); the body just fades.
+    clip: true
     title: "运行日志"
     icon: ""
     bodySpacing: 8
@@ -48,12 +50,14 @@ Card {
     TextEdit { id: clipboardHelper; visible: false }
 
     Rectangle {
-        visible: card.expanded
+        visible: opacity > 0.01
+        opacity: card.expanded ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: Theme.normal } }
         Layout.fillWidth: true
         Layout.fillHeight: true
-        Layout.minimumHeight: 80
         radius: Theme.radius
         color: Theme.sunken
+        Behavior on color { ColorAnimation { duration: Theme.slow } }
 
         ListView {
             id: list

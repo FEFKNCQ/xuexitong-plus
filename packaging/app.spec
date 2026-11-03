@@ -24,8 +24,10 @@ gui = Analysis(
         (str(PYSIDE / "qml"), "PySide6/qml"),
     ],
     binaries=[(str(PYSIDE / "plugins" / "webview" / "qtwebview_webview2.dll"), "PySide6/plugins/webview")],
-    hiddenimports=["PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuickControls2", "PySide6.QtWebView", "ui.uninstall"],
-    excludes=["tkinter", "PySide6.QtWidgets", "PySide6.QtOpenGLWidgets"],
+    hiddenimports=["PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuickControls2", "PySide6.QtWebView",
+                   "PySide6.QtWidgets", "PySide6.QtNetwork", "ui.uninstall", "ui.tray"],
+    # QtWidgets stays: the tray icon and its menu are widgets.
+    excludes=["tkinter", "PySide6.QtOpenGLWidgets"],
     noarchive=False,
 )
 

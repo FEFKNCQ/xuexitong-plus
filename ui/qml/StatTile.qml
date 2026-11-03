@@ -21,8 +21,11 @@ Rectangle {
 
     color: Theme.surface
     radius: Theme.radiusLarge
-    border.color: Theme.border
+    border.color: tileHover.hovered ? Theme.borderStrong : Theme.border
     implicitHeight: 76
+    Behavior on color { ColorAnimation { duration: Theme.slow } }
+    Behavior on border.color { ColorAnimation { duration: Theme.fast } }
+    HoverHandler { id: tileHover }
 
     Behavior on shownCount { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
 

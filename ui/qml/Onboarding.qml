@@ -181,7 +181,7 @@ Rectangle {
                             Layout.preferredHeight: 84
                             mipmap: true
                             SequentialAnimation on scale {
-                                running: guide.visible && guide.step === 0
+                                running: guide.visible && guide.step === 0 && Theme.motion
                                 loops: Animation.Infinite
                                 NumberAnimation { to: 1.04; duration: 1400; easing.type: Easing.InOutSine }
                                 NumberAnimation { to: 1.0; duration: 1400; easing.type: Easing.InOutSine }

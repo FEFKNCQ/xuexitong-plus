@@ -6,6 +6,17 @@ Rectangle {
     id: pill
     property string text: ""
     property string kind: "idle"   // idle | running | done | error
+    property string shownText: text
+    onTextChanged: {
+        if (!Theme.motion || shownText === "") { shownText = text; return }
+        swap.restart()
+    }
+    SequentialAnimation {
+        id: swap
+        NumberAnimation { target: label; property: "opacity"; to: 0; duration: Theme.fast }
+        ScriptAction { script: pill.shownText = pill.text }
+        NumberAnimation { target: label; property: "opacity"; to: 1; duration: Theme.fast }
+    }
 
     readonly property color fg: kind === "running" ? Theme.warning
         : kind === "error" ? Theme.danger
@@ -19,6 +30,7 @@ Rectangle {
     radius: height / 2
     implicitHeight: 28
     implicitWidth: row.implicitWidth + 24
+    Behavior on implicitWidth { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
 
     RowLayout {
         id: row
@@ -29,7 +41,7 @@ Rectangle {
             color: pill.fg
             Behavior on color { ColorAnimation { duration: Theme.normal } }
             SequentialAnimation on opacity {
-                running: pill.kind === "running"
+                running: pill.kind === "running" && Theme.motion
                 loops: Animation.Infinite
                 NumberAnimation { to: 0.25; duration: 700 }
                 NumberAnimation { to: 1; duration: 700 }
@@ -37,7 +49,8 @@ Rectangle {
             }
         }
         Text {
-            text: pill.text
+            id: label
+            text: pill.shownText
             color: pill.fg
             Behavior on color { ColorAnimation { duration: Theme.normal } }
             font.family: Theme.uiFont

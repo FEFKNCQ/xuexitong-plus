@@ -41,6 +41,7 @@ class StartupLoader(QObject):
         self._loaded = False
         self._warnings: list[str] = []
         self.controller = None
+        self.tray = None
         self.main_window: QObject | None = None
         self._component: QQmlComponent | None = None
         self._incubator: _Incubator | None = None
@@ -85,6 +86,12 @@ class StartupLoader(QObject):
 
         self.controller = AppController(self._app)
         self._engine.rootContext().setContextProperty("controller", self.controller)
+        # Background mode: tray icon + single-instance server (closing the window hides it).
+        from ui.tray import Tray
+
+        self.tray = Tray(self._app, self.controller, ROOT_DIR / "assets" / "learning_plus.png")
+        self.tray.showRequested.connect(self.show_main)
+        self._engine.rootContext().setContextProperty("tray", self.tray)
         QTimer.singleShot(0, self._check_runtime)
 
     def _check_runtime(self) -> None:
@@ -150,6 +157,16 @@ class StartupLoader(QObject):
         self._splash_done = True
         if self._loaded:
             self._reveal()
+
+    @Slot()
+    def show_main(self) -> None:
+        """Bring the main window back (tray click, or the app was launched again)."""
+        window = self.main_window
+        if window is None or not self._loaded:
+            return
+        window.showNormal()
+        window.raise_()
+        window.requestActivate()
 
     def _reveal(self) -> None:
         window = self.main_window

@@ -46,7 +46,18 @@ Item {
         spacing: Theme.gap
 
         ColumnLayout {
+            id: titleBlock
             spacing: 2
+            transform: Translate { id: titleShift; y: 0 }
+            ParallelAnimation {
+                id: titleIn
+                NumberAnimation { target: titleShift; property: "y"; from: 10; to: 0; duration: Theme.slow; easing.type: Easing.OutCubic }
+                NumberAnimation { target: titleBlock; property: "opacity"; from: 0; to: 1; duration: Theme.slow }
+            }
+            Connections {
+                target: page
+                function onVisibleChanged() { if (page.visible && Theme.motion) titleIn.restart() }
+            }
             Text { text: "设置"; color: Theme.text; font.family: Theme.uiFont; font.pixelSize: 22; font.weight: Font.DemiBold }
             Text { text: "账号、运行、外观、数据与隐私。基本参数在运行面板中调整。"; color: Theme.muted; font.family: Theme.uiFont; font.pixelSize: 12 }
         }
@@ -145,8 +156,18 @@ Item {
                     }
                     Divider {}
                     SettingRow {
+                        visible: typeof tray !== "undefined" && tray.available
+                        label: "关闭窗口时在后台运行"
+                        hint: "关闭窗口后程序留在系统托盘，任务继续进行；点击托盘图标重新打开，右键菜单可退出"
+                        AppSwitch {
+                            checked: typeof tray !== "undefined" && tray.closeToTray
+                            onToggled: tray.closeToTray = checked
+                        }
+                    }
+                    Divider { visible: typeof tray !== "undefined" && tray.available }
+                    SettingRow {
                         label: "运行结束时提醒"
-                        hint: "任务完成或退出时，在任务栏闪烁提醒（窗口不在前台时）"
+                        hint: "任务完成或退出时提醒：窗口在后台时用托盘通知，否则闪烁任务栏按钮"
                         AppSwitch {
                             checked: controller.alertOnFinish
                             onToggled: controller.alertOnFinish = checked
@@ -233,8 +254,24 @@ Item {
 
                     SettingRow {
                         label: "配置目录"
-                        hint: "放入 cookies.txt、查看 config.ini 和运行日志"
+                        hint: "放入 cookies.txt、查看运行日志"
                         IconButton { glyph: ""; text: "打开"; flat: false; onClicked: controller.openDataDir() }
+                    }
+                    Divider {}
+                    SettingRow {
+                        label: "配置文件"
+                        hint: "用默认编辑器打开 config.ini 修改全部配置项；改完后点“重新载入”生效"
+                        Row {
+                            spacing: 8
+                            IconButton { glyph: ""; text: "编辑配置文件"; flat: false; onClicked: controller.openConfigFile() }
+                            IconButton {
+                                glyph: ""
+                                text: "重新载入"
+                                flat: false
+                                enabled: !controller.running
+                                onClicked: controller.dirty ? reloadConfirm.open() : controller.reloadConfig()
+                            }
+                        }
                     }
                     Divider {}
                     SettingRow {
@@ -377,6 +414,14 @@ Item {
         acceptText: "清除"
         destructive: true
         onAccepted: controller.clearLogs()
+    }
+    ConfirmDialog {
+        id: reloadConfirm
+        title: "重新载入配置文件"
+        message: "界面里还有未保存的修改，重新载入会丢弃这些修改，改用 config.ini 中的内容。"
+        acceptText: "重新载入"
+        destructive: true
+        onAccepted: controller.reloadConfig()
     }
     ConfirmDialog {
         id: resetConfirm

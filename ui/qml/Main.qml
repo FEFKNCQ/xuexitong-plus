@@ -13,10 +13,25 @@ ApplicationWindow {
     visible: false
     title: controller.appName
     color: Theme.bg
+    Behavior on color { ColorAnimation { duration: Theme.slow } }
 
     property int page: 0
     property bool allowClose: false
     property bool showGuide: false
+    // Tray / background mode (absent when the UI is loaded without it, e.g. in test harnesses).
+    readonly property var trayObj: typeof tray !== "undefined" ? tray : null
+
+    function showWindow() {
+        window.showNormal()
+        window.raise()
+        window.requestActivate()
+    }
+    // Every real exit goes through here so onClosing does not hide-to-tray instead.
+    function quitApp() {
+        window.allowClose = true
+        controller.shutdown()
+        Qt.quit()
+    }
     readonly property bool accountConfigured: controller.useCookies
         || (controller.username.trim() !== "" && controller.password !== "")
     readonly property bool overlayOpen: coursePicker.visible || stopConfirm.visible
@@ -58,6 +73,7 @@ ApplicationWindow {
                 Layout.preferredWidth: 208
                 Layout.fillHeight: true
                 color: Theme.pane
+                Behavior on color { ColorAnimation { duration: Theme.slow } }
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -100,6 +116,7 @@ ApplicationWindow {
                             color: Theme.surface
                             border.color: Theme.border
                             Behavior on y { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
+                            Behavior on color { ColorAnimation { duration: Theme.slow } }
                             Rectangle {
                                 width: 3; height: 16; radius: 2
                                 color: Theme.accent
@@ -154,7 +171,7 @@ ApplicationWindow {
                                             color: window.accountConfigured ? Theme.accent : Theme.warning
                                             Layout.rightMargin: 12
                                             SequentialAnimation on scale {
-                                                running: index === 1 && !window.accountConfigured
+                                                running: index === 1 && !window.accountConfigured && Theme.motion
                                                 loops: Animation.Infinite
                                                 NumberAnimation { to: 1.5; duration: 700; easing.type: Easing.InOutSine }
                                                 NumberAnimation { to: 1.0; duration: 700; easing.type: Easing.InOutSine }
@@ -175,6 +192,7 @@ ApplicationWindow {
                         implicitHeight: noteCol.implicitHeight + 20
                         radius: Theme.radius
                         color: Theme.surfaceAlt
+                        Behavior on color { ColorAnimation { duration: Theme.slow } }
                         ColumnLayout {
                             id: noteCol
                             anchors.fill: parent
@@ -313,11 +331,8 @@ ApplicationWindow {
     UpdateDialog {
         id: updateDialog
         onInstallRequested: {
-            if (controller.updater.installAndQuit()) {
-                window.allowClose = true
-                controller.shutdown()
-                Qt.quit()
-            }
+            if (controller.updater.installAndQuit())
+                window.quitApp()
         }
     }
     Connections {
@@ -345,11 +360,7 @@ ApplicationWindow {
         message: "关闭窗口将结束当前任务。仍要退出吗？"
         acceptText: "退出"
         destructive: true
-        onAccepted: {
-            window.allowClose = true
-            controller.shutdown()
-            window.close()
-        }
+        onAccepted: window.quitApp()
     }
 
     ConfirmDialog {
@@ -370,7 +381,9 @@ ApplicationWindow {
                 promptDialog.close()
                 stopConfirm.close()
                 if (controller.statusKind === "done" || controller.statusKind === "error") {
-                    if (controller.alertOnFinish && !window.active)
+                    if (!window.visible && window.trayObj)  // hidden in the tray: use a notification
+                        window.trayObj.notify("学习通PLUS", controller.statusKind === "done" ? "任务已全部完成" : "任务进程已退出，请查看运行日志")
+                    else if (controller.alertOnFinish && !window.active)
                         window.alert(0)  // flash the taskbar button until the window is focused
                     toast.show(controller.statusKind === "done" ? "任务已全部完成" : "任务进程已退出，请查看运行日志",
                                controller.statusKind === "done" ? "info" : "warning")
@@ -384,10 +397,43 @@ ApplicationWindow {
         }
     }
 
-    onClosing: close => {
-        if (controller.running && !window.allowClose) {
-            close.accepted = false
-            closeConfirm.open()
+    Connections {
+        target: window.trayObj
+        function onQuitRequested() {
+            if (controller.running) {
+                window.showWindow()
+                closeConfirm.open()
+            } else {
+                window.quitApp()
+            }
         }
+        function onToggleRunRequested() {
+            if (controller.running) {
+                window.showWindow()
+                stopConfirm.open()
+            } else if (!window.accountConfigured) {
+                window.showWindow()
+                window.openSettings()
+            } else {
+                controller.startRun()
+            }
+        }
+    }
+
+    onClosing: close => {
+        if (window.allowClose)
+            return
+        if (window.trayObj && window.trayObj.closeToTray) {
+            // Keep running in the background; the tray icon brings the window back.
+            close.accepted = false
+            window.hide()
+            window.trayObj.hintOnce()
+            return
+        }
+        close.accepted = false
+        if (controller.running)
+            closeConfirm.open()
+        else
+            window.quitApp()
     }
 }
