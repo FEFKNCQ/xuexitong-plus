@@ -209,6 +209,12 @@ Item {
                     }
                 }
 
+                // ---------- 高级选项 (config.ini) ----------
+                AdvancedOptions {
+                    Layout.fillWidth: true
+                    appearDelay: 140
+                }
+
                 // ---------- 外观与动画 ----------
                 Card {
                     Layout.fillWidth: true

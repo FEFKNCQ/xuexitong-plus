@@ -24,6 +24,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 
+from ui import advanced
 from ui.models import LogModel, TaskModel
 from ui.output_parser import (
     ActivityEvent,
@@ -236,6 +237,7 @@ class AppController(QObject):
             "add_learning_count": common.getboolean("add_learning_count", fallback=False),
             "target_count": max(1, common.getint("target_count", fallback=100)),
         }
+        self._advanced = advanced.read_values(self._config)
 
     def _set_dirty(self, value: bool) -> None:
         if self._dirty != value:
@@ -252,6 +254,20 @@ class AppController(QObject):
     retryInterval = _config_property("retry_interval", float, 1.0, configChanged)
     addLearningCount = _config_property("add_learning_count", bool, False, configChanged)
     targetCount = _config_property("target_count", int, 100, configChanged)
+
+    # ----- advanced options (the rest of config.ini) ----------------------
+    advancedGroups = Property("QVariantList", lambda self: advanced.GROUPS, constant=True)
+    advancedValues = Property("QVariantMap", lambda self: self._advanced, notify=configChanged)
+
+    @Slot(str, "QVariant")
+    def setAdvanced(self, field_id: str, value) -> None:
+        if field_id not in self._advanced:
+            return
+        text = advanced.normalize(field_id, value)
+        if self._advanced[field_id] != text:
+            self._advanced[field_id] = text
+            self._set_dirty(True)
+            self.configChanged.emit()
 
     dirty = Property(bool, lambda self: self._dirty, notify=dirtyChanged)
     speedOptions = Property("QStringList", lambda self: SPEED_OPTIONS, constant=True)
@@ -274,6 +290,7 @@ class AppController(QObject):
         common["retry_interval"] = f"{v['retry_interval']:g}"
         common["add_learning_count"] = str(v["add_learning_count"]).lower()
         common["target_count"] = str(v["target_count"])
+        advanced.write_values(self._config, self._advanced)
         try:
             DATA_DIR.mkdir(parents=True, exist_ok=True)
             with CONFIG_PATH.open("w", encoding="utf-8") as config_file:

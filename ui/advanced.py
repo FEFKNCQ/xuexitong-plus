@@ -1,0 +1,160 @@
+# -*- coding: utf-8 -*-
+"""Advanced options: the config.ini keys the worker reads that the basic settings do not cover.
+
+Each field maps one ``[section] key`` to a control on the settings page. Values travel
+as strings (exactly what config.ini stores) so unknown formats round-trip unchanged;
+the QML side converts for switches, sliders and spin boxes. Pure Python, no Qt.
+
+``show`` makes a field depend on another one:
+    {"key": "tiku.provider", "has": "AI"}   comma list contains the value
+    {"key": "notification.provider", "eq": "Telegram"}
+    {"key": "notification.provider", "ne": ""}
+    {"key": "tiku.submit", "on": True}      switch is on
+"""
+
+from __future__ import annotations
+
+import configparser
+
+TIKU_PROVIDERS = [
+    {"value": "TikuYanxi", "label": "言溪题库", "hint": "需要 TOKEN"},
+    {"value": "TikuLike", "label": "LIKE 知识库", "hint": "需要 TOKEN，支持联网和识图"},
+    {"value": "TikuGo", "label": "GO 题", "hint": "网课小工具题库"},
+    {"value": "TikuAdapter", "label": "TikuAdapter", "hint": "自建的开源题库服务"},
+    {"value": "AI", "label": "大模型", "hint": "任意 OpenAI 兼容接口"},
+    {"value": "SiliconFlow", "label": "硅基流动", "hint": "SiliconFlow 大模型"},
+]
+
+NOTIFY_PROVIDERS = [
+    {"value": "", "label": "不推送"},
+    {"value": "ServerChan", "label": "Server酱"},
+    {"value": "Qmsg", "label": "Qmsg酱"},
+    {"value": "Bark", "label": "Bark"},
+    {"value": "Telegram", "label": "Telegram"},
+]
+
+
+def _f(section, key, type_, label, default="", hint="", **extra) -> dict:
+    return {"id": f"{section}.{key}", "section": section, "key": key, "type": type_,
+            "label": label, "hint": hint, "default": default, **extra}
+
+
+# type: providers | switch | percent | number | choice | text | secret | heading
+GROUPS: list[dict] = [
+    {
+        "id": "tiku",
+        "title": "题库",
+        "subtitle": "章节检测从哪些题库查找答案",
+        "icon": "",
+        "fields": [
+            _f("tiku", "provider", "providers", "使用的题库", "",
+               "可多选。按选择顺序查询，前一个找不到再用下一个；都不选则不查题库",
+               options=TIKU_PROVIDERS),
+            # Per-provider settings, shown only for the selected providers.
+            _f("tiku", "", "heading", "言溪 / LIKE 知识库", show={"key": "tiku.provider", "has": ["TikuYanxi", "TikuLike"]}),
+            _f("tiku", "tokens", "secret", "TOKEN", "", "多个用英文逗号隔开，按顺序使用",
+               show={"key": "tiku.provider", "has": ["TikuYanxi", "TikuLike"]}),
+            _f("tiku", "likeapi_model", "text", "LIKE 模型", "glm-4.5-air", "例如 glm-4.5-air",
+               show={"key": "tiku.provider", "has": ["TikuLike"]}),
+            _f("tiku", "likeapi_search", "switch", "联网搜索", "false",
+               show={"key": "tiku.provider", "has": ["TikuLike"]}),
+            _f("tiku", "likeapi_vision", "switch", "识别图片", "true", "能读取题目里的图片",
+               show={"key": "tiku.provider", "has": ["TikuLike"]}),
+            _f("tiku", "", "heading", "GO 题", show={"key": "tiku.provider", "has": ["TikuGo"]}),
+            _f("tiku", "go_authorization", "secret", "授权码", "", "GO 题提供的 Authorization",
+               show={"key": "tiku.provider", "has": ["TikuGo"]}),
+            _f("tiku", "", "heading", "TikuAdapter", show={"key": "tiku.provider", "has": ["TikuAdapter"]}),
+            _f("tiku", "url", "text", "服务地址", "", "例如 http://127.0.0.1:8060/adapter-service/search",
+               show={"key": "tiku.provider", "has": ["TikuAdapter"]}),
+            _f("tiku", "", "heading", "大模型", show={"key": "tiku.provider", "has": ["AI"]}),
+            _f("tiku", "endpoint", "text", "接口地址", "", "通常要带 /v1，例如 https://api.example.com/v1",
+               show={"key": "tiku.provider", "has": ["AI"]}),
+            _f("tiku", "key", "secret", "API Key", "", show={"key": "tiku.provider", "has": ["AI"]}),
+            _f("tiku", "model", "text", "模型名称", "", show={"key": "tiku.provider", "has": ["AI"]}),
+            _f("tiku", "http_proxy", "text", "代理", "", "可选，例如 http://127.0.0.1:7890",
+               show={"key": "tiku.provider", "has": ["AI"]}),
+            _f("tiku", "", "heading", "硅基流动", show={"key": "tiku.provider", "has": ["SiliconFlow"]}),
+            _f("tiku", "siliconflow_key", "secret", "API Key", "",
+               show={"key": "tiku.provider", "has": ["SiliconFlow"]}),
+            _f("tiku", "siliconflow_model", "text", "模型名称", "deepseek-ai/DeepSeek-R1",
+               "例如 deepseek-ai/DeepSeek-V3", show={"key": "tiku.provider", "has": ["SiliconFlow"]}),
+            _f("tiku", "siliconflow_endpoint", "text", "接口地址", "https://api.siliconflow.cn/v1/chat/completions",
+               show={"key": "tiku.provider", "has": ["SiliconFlow"]}),
+            _f("tiku", "min_interval_seconds", "number", "大模型请求间隔", "3", "两次请求之间至少等待多久，0 表示不限制",
+               min=0, max=120, step=1, decimals=0, suffix="秒",
+               show={"key": "tiku.provider", "has": ["AI", "SiliconFlow"]}),
+            _f("tiku", "check_llm_connection", "switch", "运行前检查大模型连接", "true",
+               "连接失败时会询问是否继续", show={"key": "tiku.provider", "has": ["AI", "SiliconFlow"]}),
+        ],
+    },
+    {
+        "id": "answer",
+        "title": "答题",
+        "subtitle": "找到答案之后如何提交，以及判断题的识别",
+        "icon": "",
+        "fields": [
+            _f("tiku", "submit", "switch", "达到覆盖率时提交", "true",
+               "关闭则只保存答案，之后可以自己到学习通检查后提交。需要解锁下一章的章节必须提交"),
+            _f("tiku", "cover_rate", "percent", "最低题库覆盖率", "0.9",
+               "查到答案的题目占比达到这个值才提交，否则只保存", show={"key": "tiku.submit", "on": True}),
+            _f("tiku", "delay", "number", "查题间隔", "1.0", "每查一道题后等待的时间",
+               min=0, max=30, step=0.5, decimals=1, suffix="秒"),
+            _f("common", "work_redo_enabled", "switch", "答错后自动重做", "false",
+               "只在课程允许多次作答时开启"),
+            _f("common", "work_max_retries", "number", "最多重做次数", "3",
+               min=1, max=10, step=1, decimals=0, suffix="次", show={"key": "common.work_redo_enabled", "on": True}),
+            _f("tiku", "true_list", "text", "判断题“正确”的写法", "正确,对,√,是", "英文逗号隔开，不要加空格或引号"),
+            _f("tiku", "false_list", "text", "判断题“错误”的写法", "错误,错,×,否,不对,不正确", "英文逗号隔开，不要加空格或引号"),
+        ],
+    },
+    {
+        "id": "notify",
+        "title": "通知推送",
+        "subtitle": "任务结束或出错时推送到手机",
+        "icon": "",
+        "fields": [
+            _f("notification", "provider", "choice", "推送服务", "", options=NOTIFY_PROVIDERS),
+            _f("notification", "url", "secret", "推送地址", "",
+               "服务提供的完整推送地址（含密钥），例如 Server酱的 https://sctapi.ftqq.com/<SendKey>.send",
+               show={"key": "notification.provider", "ne": ""}),
+            _f("notification", "tg_chat_id", "text", "Chat ID", "", show={"key": "notification.provider", "eq": "Telegram"}),
+        ],
+    },
+]
+
+# Template placeholders that mean "not filled in".
+_PLACEHOLDERS = {"xxx", "xxxxxx"}
+
+
+def fields() -> list[dict]:
+    return [f for g in GROUPS for f in g["fields"] if f["type"] != "heading"]
+
+
+def read_values(config: configparser.ConfigParser) -> dict[str, str]:
+    values = {}
+    for f in fields():
+        raw = config.get(f["section"], f["key"], fallback=f["default"]).strip()
+        values[f["id"]] = "" if raw.lower() in _PLACEHOLDERS else raw
+    return values
+
+
+def write_values(config: configparser.ConfigParser, values: dict[str, str]) -> None:
+    """Store values; keys missing from the file are only added when they differ from the default."""
+    for f in fields():
+        value = str(values.get(f["id"], f["default"])).strip()
+        section, key = f["section"], f["key"]
+        if not config.has_section(section):
+            config.add_section(section)
+        if config.has_option(section, key) or value != f["default"]:
+            config[section][key] = value
+
+
+def normalize(field_id: str, value) -> str:
+    """QML hands over bools / numbers / lists; store them the way config.ini spells them."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (list, tuple)):
+        return ",".join(str(v).strip() for v in value if str(v).strip())
+    if isinstance(value, float):
+        return f"{value:g}"
+    return str(value)
