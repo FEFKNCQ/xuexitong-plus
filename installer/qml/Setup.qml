@@ -366,6 +366,49 @@ ApplicationWindow {
                             AppSwitch { id: desktopSwitch; text: "创建桌面快捷方式"; checked: true }
                             AppSwitch { id: startMenuSwitch; text: "添加到开始菜单"; checked: true }
                             AppSwitch { id: launchSwitch; text: "安装完成后启动 " + installer.appName; checked: true }
+
+                            // Runtime components: WebView2 is needed for the video preview.
+                            Item { Layout.preferredHeight: 4 }
+                            Text { text: "运行组件"; color: Theme.muted; font.family: Theme.uiFont; font.pixelSize: 12 }
+                            Rectangle {
+                                Layout.fillWidth: true
+                                implicitHeight: depRow.implicitHeight + 20
+                                radius: Theme.radius
+                                color: installer.webview2Version !== "" ? Theme.sunken : Theme.warningSoft
+                                RowLayout {
+                                    id: depRow
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    anchors.leftMargin: 12
+                                    spacing: 10
+                                    Text {
+                                        text: installer.webview2Version !== "" ? "" : ""
+                                        font.family: Theme.iconFont
+                                        font.pixelSize: 14
+                                        color: installer.webview2Version !== "" ? Theme.success : Theme.warning
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 1
+                                        Text { text: installer.webview2Name; color: Theme.text; font.family: Theme.uiFont; font.pixelSize: 13 }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: installer.webview2Version !== ""
+                                                ? "已安装 · 版本 " + installer.webview2Version
+                                                : "未安装。视频预览需要它，可在安装时从微软官网下载（约 2 MB，安装过程中再联网获取运行时）"
+                                            color: Theme.muted
+                                            font.family: Theme.uiFont
+                                            font.pixelSize: 11
+                                            wrapMode: Text.Wrap
+                                        }
+                                    }
+                                    AppSwitch {
+                                        id: depsSwitch
+                                        visible: installer.webview2Version === ""
+                                        checked: true
+                                    }
+                                }
+                            }
                             Item { Layout.fillHeight: true }
                         }
                     }
@@ -471,6 +514,35 @@ ApplicationWindow {
                                 lineHeight: 1.35
                                 wrapMode: Text.WrapAnywhere
                             }
+                            // Installed, but a runtime component could not be set up.
+                            Rectangle {
+                                visible: parent.parent.ok && installer.warningText !== ""
+                                Layout.fillWidth: true
+                                implicitHeight: warnCol.implicitHeight + 20
+                                radius: Theme.radius
+                                color: Theme.warningSoft
+                                ColumnLayout {
+                                    id: warnCol
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    anchors.leftMargin: 12
+                                    spacing: 6
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: installer.warningText + "程序可以正常使用，只是视频预览无法显示。"
+                                        color: Theme.warning
+                                        font.family: Theme.uiFont
+                                        font.pixelSize: 12
+                                        lineHeight: 1.3
+                                        wrapMode: Text.Wrap
+                                    }
+                                    AppButton {
+                                        text: "打开微软 WebView2 下载页"
+                                        glyph: ""
+                                        onClicked: installer.openUrl(installer.webview2Page)
+                                    }
+                                }
+                            }
                             Item { Layout.fillHeight: true }
                         }
                     }
@@ -523,7 +595,8 @@ ApplicationWindow {
                             glyph: ""
                             kind: "primary"
                             enabled: window.targetDir.trim() !== ""
-                            onClicked: installer.install(window.targetDir, desktopSwitch.checked, startMenuSwitch.checked)
+                            onClicked: installer.install(window.targetDir, desktopSwitch.checked, startMenuSwitch.checked,
+                                                         installer.webview2Version === "" && depsSwitch.checked)
                         }
                         AppButton {
                             visible: window.step === 4 && installer.state === "error"

@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -22,7 +23,7 @@ from PySide6.QtGui import QFont, QGuiApplication, QIcon  # noqa: E402
 from PySide6.QtQml import QQmlApplicationEngine  # noqa: E402
 from PySide6.QtQuickControls2 import QQuickStyle  # noqa: E402
 
-from ui import winsetup  # noqa: E402
+from ui import runtime_deps, winsetup  # noqa: E402
 from ui.controller import APP_VERSION as VERSION  # noqa: E402
 ZIP_ROOT = winsetup.APP_NAME + "/"
 
@@ -50,14 +51,17 @@ def _members(archive: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
 class InstallWorker(QThread):
     progressed = Signal(float, str)
     failed = Signal(str)
+    warned = Signal(str)
     succeeded = Signal()
 
-    def __init__(self, payload: Path, target: Path, desktop: bool, start_menu: bool) -> None:
+    def __init__(self, payload: Path, target: Path, desktop: bool, start_menu: bool,
+                 install_deps: bool = True) -> None:
         super().__init__()
         self.payload = payload
         self.target = target
         self.desktop = desktop
         self.start_menu = start_menu
+        self.install_deps = install_deps
 
     def run(self) -> None:
         try:
@@ -95,9 +99,18 @@ class InstallWorker(QThread):
                 with archive.open(info) as src, open(dest, "wb") as dst:
                     shutil.copyfileobj(src, dst, 1024 * 1024)
                 done += info.file_size
-                self.progressed.emit(0.05 + 0.85 * done / total, rel)
+                self.progressed.emit(0.05 + 0.75 * done / total, rel)
 
-        self.progressed.emit(0.92, "创建快捷方式")
+        # A missing runtime does not fail the install: the app still runs, only the
+        # video preview needs WebView2. The finish page reports what went wrong.
+        if self.install_deps and not runtime_deps.webview2_version():
+            work = Path(tempfile.gettempdir()) / "xxtplus-setup"
+            problem = runtime_deps.install_webview2(
+                work, lambda text, value: self.progressed.emit(0.80 + 0.12 * value, text))
+            if problem:
+                self.warned.emit(problem)
+
+        self.progressed.emit(0.93, "创建快捷方式")
         exe = target / winsetup.APP_EXE
         if self.start_menu:
             winsetup.create_shortcut(winsetup.start_menu_shortcut(), exe)
@@ -122,6 +135,8 @@ class Installer(QObject):
         self._current = ""
         self._error = ""
         self._worker: InstallWorker | None = None
+        self._warning = ""
+        self._webview2 = runtime_deps.webview2_version()
         self._installed = winsetup.read_installed()
         self._size_mb = 0
         self._payload_ok = False
@@ -144,6 +159,11 @@ class Installer(QObject):
     errorText = Property(str, lambda self: self._error, notify=stateChanged)
     progress = Property(float, lambda self: self._progress, notify=progressChanged)
     currentFile = Property(str, lambda self: self._current, notify=progressChanged)
+    # Runtime components (see ui/runtime_deps.py).
+    webview2Version = Property(str, lambda self: self._webview2, constant=True)
+    webview2Name = Property(str, lambda self: runtime_deps.WEBVIEW2_NAME, constant=True)
+    webview2Page = Property(str, lambda self: runtime_deps.WEBVIEW2_PAGE, constant=True)
+    warningText = Property(str, lambda self: self._warning, notify=stateChanged)
 
     @Slot(str, result=str)
     def normalizeDir(self, value: str) -> str:
@@ -168,17 +188,19 @@ class Installer(QObject):
             return ""
         return f"{free / 1024 ** 3:.1f} GB 可用"
 
-    @Slot(str, bool, bool)
-    def install(self, folder: str, desktop: bool, start_menu: bool) -> None:
+    @Slot(str, bool, bool, bool)
+    def install(self, folder: str, desktop: bool, start_menu: bool, install_deps: bool) -> None:
         if self._state == "installing":
             return
         self._state = "installing"
         self._error = ""
+        self._warning = ""
         self._progress = 0.0
         self.stateChanged.emit()
-        self._worker = InstallWorker(self._payload, Path(folder), desktop, start_menu)
+        self._worker = InstallWorker(self._payload, Path(folder), desktop, start_menu, install_deps)
         self._worker.progressed.connect(self._on_progress)
         self._worker.failed.connect(self._on_failed)
+        self._worker.warned.connect(self._on_warned)
         self._worker.succeeded.connect(self._on_done)
         self._worker.start()
 
@@ -191,6 +213,13 @@ class Installer(QObject):
         self._state = "error"
         self._error = message
         self.stateChanged.emit()
+
+    def _on_warned(self, message: str) -> None:
+        self._warning = message
+
+    @Slot(str)
+    def openUrl(self, url: str) -> None:
+        os.startfile(url)  # noqa: S606 - fixed Microsoft page
 
     def _on_done(self) -> None:
         self._state = "done"
@@ -218,10 +247,10 @@ def _install_log() -> None:
 
 
 def silent_install(argv: list[str]) -> int:
-    """``--silent [--dir PATH] [--no-shortcuts]``: install without UI; exit code 0 on success."""
+    """``--silent [--dir PATH] [--no-shortcuts] [--no-deps]``: install without UI; exit code 0 on success."""
     target = Path(argv[argv.index("--dir") + 1]) if "--dir" in argv else winsetup.default_install_dir()
     shortcuts = "--no-shortcuts" not in argv
-    worker = InstallWorker(payload_path(argv), target, shortcuts, shortcuts)
+    worker = InstallWorker(payload_path(argv), target, shortcuts, shortcuts, "--no-deps" not in argv)
     errors: list[str] = []
     worker.failed.connect(errors.append)
     worker.run()
