@@ -53,6 +53,8 @@ GUI 启动 worker 时设置 `CHAOXING_DESKTOP_PREVIEW=1`（以及 `PYTHONUNBUFFE
 
 原生 WebView 会盖住 QML 弹层，所以对话框打开时 `VideoView` 会被暂停显示（`suspended`）。
 
+WebView2 在创建时就定下可见性：在主窗口还藏在启动画面后面、或 WebView 本身隐藏时创建的，之后即使显示出来，页面的 `document.visibilityState` 仍是 `hidden`，Chromium 不会加载 `<video>`（表现为白屏、代理收不到 `/v/` 请求）。所以 `VideoView` 用 `Loader` 只在真正显示时创建 WebView，每次显示都新建一个；不要改回常驻 WebView + 切换 `visible`。
+
 ## worker 标准输入
 
 `main.py` 会在两处调用 `input()`：课程 ID 为空时选择课程、大模型连接检查失败时 Y/n 确认。GUI 识别这两种提示后弹出对话框，再把答案写入 worker 标准输入。新增 `input()` 调用时要同步更新 `ui/output_parser.py`，否则任务会卡住。

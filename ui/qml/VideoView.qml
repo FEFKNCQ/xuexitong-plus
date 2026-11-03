@@ -16,28 +16,36 @@ Rectangle {
     radius: Theme.radius
     clip: true
 
+    // WebView2 fixes its visibility when the view is created: one made while it (or the
+    // window) is hidden keeps reporting document.visibilityState "hidden" after it is shown,
+    // and Chromium does not load <video> on a hidden page. So the web view only exists while
+    // it is on screen, and every show creates a fresh one.
+    readonly property bool webLive: root.visible && root.showWeb && Window.window !== null && Window.window.visible
+
     function reload() {
-        if (!webView.visible)
+        const view = webLoader.item
+        if (!view)
             return
         // Prefer the page served by the local video proxy: WebView2 turns loadHtml() into a
         // data: URL navigation, which does not reliably play the video.
         if (controller.videoPageUrl !== "")
-            webView.url = controller.videoPageUrl
+            view.url = controller.videoPageUrl
         else
-            webView.loadHtml(controller.videoHtml, controller.videoBaseUrl)
+            view.loadHtml(controller.videoHtml, controller.videoBaseUrl)
     }
 
-    WebView {
-        id: webView
+    Loader {
+        id: webLoader
         anchors.fill: parent
         anchors.margins: 1
-        visible: root.visible && root.showWeb
-        settings.javaScriptEnabled: true
-        settings.localStorageEnabled: false
-        settings.allowFileAccess: false
-        settings.localContentCanAccessFileUrls: false
-        onVisibleChanged: root.reload()
-        Component.onCompleted: root.reload()
+        active: root.webLive
+        sourceComponent: WebView {
+            settings.javaScriptEnabled: true
+            settings.localStorageEnabled: false
+            settings.allowFileAccess: false
+            settings.localContentCanAccessFileUrls: false
+        }
+        onLoaded: root.reload()
     }
 
     Connections {
