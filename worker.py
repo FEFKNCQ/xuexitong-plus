@@ -8,7 +8,16 @@ import sys
 from pathlib import Path
 
 
+def _utf8_streams() -> None:
+    """The GUI reads our output as UTF-8. The packaged exe ignores PYTHONUTF8 and would
+    otherwise write in the system code page (GBK on Chinese Windows) -> garbled log."""
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def run_worker(argv: list[str]) -> int:
+    _utf8_streams()
     if len(argv) != 4 or argv[1] != "--worker":
         print("用法: chaoxing-worker.exe --worker <config.ini> <data-directory>")
         return 2

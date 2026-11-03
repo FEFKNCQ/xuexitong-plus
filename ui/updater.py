@@ -209,8 +209,11 @@ class Updater(QObject):
 
     @Slot()
     def cancel(self) -> None:
-        if isinstance(self._worker, _DownloadWorker) and self._worker.isRunning():
-            self._worker.cancelled = True
+        try:
+            if isinstance(self._worker, _DownloadWorker) and self._worker.isRunning():
+                self._worker.cancelled = True
+        except RuntimeError:        # the thread object was already deleted
+            self._worker = None
 
     def _on_progress(self, value: float) -> None:
         self._progress = value
@@ -230,10 +233,25 @@ class Updater(QObject):
 
     def _start(self, worker: QThread) -> None:
         self._worker = worker
+        # Drop our reference before Qt deletes the finished thread object; touching a
+        # deleted QThread (e.g. in shutdown() on exit) raises "Internal C++ object already deleted".
+        worker.finished.connect(lambda: self._forget(worker))
         worker.finished.connect(worker.deleteLater)
         worker.start()
 
+    def _forget(self, worker: QThread) -> None:
+        if self._worker is worker:
+            self._worker = None
+
     def shutdown(self) -> None:
-        if self._worker is not None and self._worker.isRunning():
+        worker = self._worker
+        if worker is None:
+            return
+        try:
+            running = worker.isRunning()
+        except RuntimeError:        # already deleted by Qt
+            self._worker = None
+            return
+        if running:
             self.cancel()
-            self._worker.wait(3000)
+            worker.wait(3000)

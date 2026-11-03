@@ -60,6 +60,28 @@ class ReleaseHandlingTestCase(unittest.TestCase):
         self.assertEqual(self.u.state, "error")
 
 
+class ShutdownAfterWorkerFinishedTestCase(unittest.TestCase):
+    """Regression: exiting after an update check crashed with
+    'Internal C++ object (_CheckWorker) already deleted'."""
+
+    def test_shutdown_after_finished_worker_is_deleted(self):
+        from PySide6.QtCore import QCoreApplication, QEvent, QEventLoop, QThread, QTimer
+
+        class Quick(QThread):
+            def run(self):
+                pass
+
+        u = upd.Updater("1.0.0")
+        u._start(Quick())
+        loop = QEventLoop()
+        QTimer.singleShot(300, loop.quit)
+        loop.exec()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)  # run deleteLater
+        u.shutdown()   # must not raise
+        u.cancel()     # must not raise
+        self.assertIsNone(u._worker)
+
+
 class DownloadTestCase(unittest.TestCase):
     def _run(self, payload: bytes, digest: str):
         with tempfile.TemporaryDirectory() as tmp:

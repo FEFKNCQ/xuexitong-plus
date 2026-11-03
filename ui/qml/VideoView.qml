@@ -17,7 +17,13 @@ Rectangle {
     clip: true
 
     function reload() {
-        if (webView.visible)
+        if (!webView.visible)
+            return
+        // Prefer the page served by the local video proxy: WebView2 turns loadHtml() into a
+        // data: URL navigation, which does not reliably play the video.
+        if (controller.videoPageUrl !== "")
+            webView.url = controller.videoPageUrl
+        else
             webView.loadHtml(controller.videoHtml, controller.videoBaseUrl)
     }
 

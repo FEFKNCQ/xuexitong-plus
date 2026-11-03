@@ -30,6 +30,7 @@ from ui.output_parser import (
     CourseListEvent,
     LogEvent,
     OutputParser,
+    StreamDecoder,
     ProgressEvent,
     PromptEvent,
     VideoPreviewEvent,
@@ -172,6 +173,7 @@ class AppController(QObject):
         self._dirty = False
         self._process: QProcess | None = None
         self._parser = OutputParser()
+        self._decoder = StreamDecoder()
         self._log_model = LogModel(parent=self)
         self._task_model = TaskModel(parent=self)
         self._status = "就绪"
@@ -184,6 +186,7 @@ class AppController(QObject):
         self._completed = 0
         self._video_html = video_message_html("等待视频任务开始")
         self._video_message = "等待视频任务开始"
+        self._video_page = ""
         self._video_title = ""
         self._video_active = False
         self._work: dict = {}
@@ -197,6 +200,9 @@ class AppController(QObject):
         from ui.updater import Updater
 
         self._updater = Updater(APP_VERSION, self)
+        from ui.videoproxy import VideoProxy
+
+        self._video_proxy = VideoProxy()
 
     updater = Property(QObject, lambda self: self._updater, constant=True)
 
@@ -519,6 +525,7 @@ class AppController(QObject):
 
         self._process = process
         self._parser = OutputParser()
+        self._decoder = StreamDecoder()
         self._task_model.clear()
         self._course = self._chapter = self._task = ""
         self._completed = 0
@@ -548,6 +555,7 @@ class AppController(QObject):
     @Slot()
     def shutdown(self) -> None:
         self._updater.shutdown()
+        self._video_proxy.stop()
         if self._process and self._process.state() != QProcess.ProcessState.NotRunning:
             self._process.kill()
             self._process.waitForFinished(1500)
@@ -569,7 +577,7 @@ class AppController(QObject):
     def _read_output(self, final: bool = False) -> None:
         if self._process is None:
             return
-        chunk = bytes(self._process.readAllStandardOutput()).decode("utf-8", errors="replace")
+        chunk = self._decoder.decode(bytes(self._process.readAllStandardOutput()), final=final)
         for event in self._parser.feed(chunk, final=final):
             self._handle_event(event)
 
@@ -594,7 +602,14 @@ class AppController(QObject):
             if not event.valid:
                 self._set_video(video_message_html("无法读取当前视频预览"), "", False, "无法读取当前视频预览")
             elif event.source:
-                self._set_video(video_source_html(event.source), event.title, True, "")
+                # Played through the local proxy so the CDN gets the Referer it expects.
+                try:
+                    local = self._video_proxy.register(event.source)
+                except ValueError:
+                    self._set_video(video_message_html("视频地址不是学习通域名，已忽略"), event.title, False, "视频地址不是学习通域名，已忽略")
+                else:
+                    page = self._video_proxy.register_page(video_source_html(local))
+                    self._set_video(video_source_html(local), event.title, True, "", page)
             else:
                 self._set_video(video_message_html("当前章节没有可显示的视频流"), event.title, False, "当前章节没有可显示的视频流")
         elif isinstance(event, WorkPreviewEvent):
@@ -635,9 +650,10 @@ class AppController(QObject):
             self._log("ERROR", f"任务进程错误：{self._process.errorString()}")
 
     # ----- visual panel --------------------------------------------------
-    def _set_video(self, markup: str, title: str, active: bool, message: str = "") -> None:
+    def _set_video(self, markup: str, title: str, active: bool, message: str = "", page_url: str = "") -> None:
         self._video_html = markup
         self._video_message = message
+        self._video_page = page_url
         self._video_title = title
         self._video_active = active
         self.videoChanged.emit()
@@ -646,6 +662,8 @@ class AppController(QObject):
     videoTitle = Property(str, lambda self: self._video_title, notify=videoChanged)
     videoActive = Property(bool, lambda self: self._video_active, notify=videoChanged)
     videoMessage = Property(str, lambda self: self._video_message, notify=videoChanged)
+    # http://127.0.0.1 page served by the video proxy (preferred over loadHtml, see ui/videoproxy.py).
+    videoPageUrl = Property(str, lambda self: self._video_page, notify=videoChanged)
     videoBaseUrl = Property(str, lambda self: VIDEO_BASE_URL, constant=True)
     work = Property("QVariantMap", lambda self: self._work, notify=workChanged)
     workStatus = Property(str, lambda self: self._work_status, notify=workChanged)

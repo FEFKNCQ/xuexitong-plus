@@ -117,6 +117,35 @@ class OutputParserTestCase(unittest.TestCase):
         self.assertEqual([e.message for e in of_type(events, LogEvent)], ["tail without newline"])
 
 
+class StreamDecoderTestCase(unittest.TestCase):
+    def test_utf8_split_across_reads(self):
+        from ui.output_parser import StreamDecoder
+
+        data = "登录成功\n".encode("utf-8")
+        d = StreamDecoder()
+        text = d.decode(data[:2]) + d.decode(data[2:5]) + d.decode(data[5:], final=True)
+        self.assertEqual(text, "登录成功\n")
+        self.assertEqual(d.encoding, "utf-8")
+
+    def test_falls_back_to_gbk(self):
+        from ui.output_parser import StreamDecoder
+
+        d = StreamDecoder()
+        first = d.decode("用法: chaoxing-worker.exe\n".encode("gbk"))
+        rest = d.decode("当前章节: 1.1\n".encode("gbk"), final=True)
+        self.assertEqual(first + rest, "用法: chaoxing-worker.exe\n当前章节: 1.1\n")
+        self.assertEqual(d.encoding, "gb18030")
+
+    def test_gbk_starting_like_utf8_lead_byte(self):
+        from ui.output_parser import StreamDecoder
+
+        # "开始" in GBK is C1 F7 ... ; an incomplete-looking first read must not lose bytes.
+        raw = "开始学习课程: 大学物理\n".encode("gbk")
+        d = StreamDecoder()
+        out = "".join(d.decode(raw[i:i + 1]) for i in range(len(raw))) + d.decode(b"", final=True)
+        self.assertEqual(out, "开始学习课程: 大学物理\n")
+
+
 class WorkPreviewEmitTestCase(unittest.TestCase):
     def test_emit_respects_flag_and_never_raises(self):
         from api.base import _emit_work_preview, _work_preview_questions

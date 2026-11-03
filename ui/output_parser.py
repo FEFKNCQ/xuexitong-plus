@@ -85,6 +85,33 @@ class PromptEvent:
     text: str
 
 
+class StreamDecoder:
+    """Bytes from the worker -> text.
+
+    Incremental, so a character split across two reads is not garbled. Expects UTF-8;
+    if the bytes are not valid UTF-8 (an older packaged worker writes the system code
+    page, GBK on Chinese Windows) it switches to GB18030 for the rest of the stream.
+    """
+
+    def __init__(self) -> None:
+        import codecs
+
+        self._codecs = codecs
+        self._decoder = codecs.getincrementaldecoder("utf-8")("strict")
+        self.encoding = "utf-8"
+
+    def decode(self, data: bytes, final: bool = False) -> str:
+        if self.encoding == "utf-8":
+            try:
+                return self._decoder.decode(data, final)
+            except UnicodeDecodeError:
+                pending = self._decoder.getstate()[0]
+                self.encoding = "gb18030"
+                self._decoder = self._codecs.getincrementaldecoder("gb18030")("replace")
+                data = pending + data
+        return self._decoder.decode(data, final)
+
+
 def strip_ansi(text: str) -> str:
     return ANSI_RE.sub("", text)
 
