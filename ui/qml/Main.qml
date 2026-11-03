@@ -401,6 +401,9 @@ ApplicationWindow {
             }
         }
         function onCourseSelectionRequested(courses) { coursePicker.openWith(courses) }
+        function onCoursesDetected(courses) {
+            coursePicker.openSelect(courses, controller.courseList.split(",").map(x => x.trim()))
+        }
         function onPromptRequested(text) {
             promptDialog.message = text
             promptDialog.open()

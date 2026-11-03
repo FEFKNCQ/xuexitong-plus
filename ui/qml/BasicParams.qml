@@ -19,13 +19,42 @@ Card {
         Behavior on opacity { NumberAnimation { duration: Theme.normal } }
 
         Label { text: "课程 ID"; color: Theme.muted; font.pixelSize: 12; Layout.columnSpan: 2 }
-        TextField {
+        RowLayout {
             Layout.columnSpan: 2
             Layout.fillWidth: true
-            placeholderText: "留空则运行时选择课程；多个 ID 用英文逗号分隔"
-            text: controller.courseList
-            onTextEdited: controller.courseList = text
-            selectByMouse: true
+            spacing: 8
+            AppTextField {
+                Layout.fillWidth: true
+                placeholderText: "点“识别课程”自动读取，或手动填写；多个 ID 用英文逗号分隔，留空学习全部"
+                text: controller.courseList
+                onTextEdited: controller.courseList = text
+            }
+            AppButton {
+                objectName: "detectCoursesButton"
+                text: controller.courseDetectState === "running" ? "识别中…" : "识别课程"
+                glyph: ""
+                enabled: controller.courseDetectState !== "running"
+                onClicked: controller.detectCourses()
+            }
+        }
+        // Names of the courses in the field (known from the last recognition).
+        Text {
+            readonly property var names: {
+                const ids = controller.courseList.split(",").map(s => s.trim()).filter(s => s !== "")
+                const byId = {}
+                for (const c of controller.knownCourses) byId[c.courseId] = c.title
+                return ids.map(i => byId[i] || ("未识别的课程 " + i))
+            }
+            visible: names.length > 0 || controller.courseDetectState === "error"
+            Layout.columnSpan: 2
+            Layout.fillWidth: true
+            text: controller.courseDetectState === "error" && names.length === 0
+                ? "⚠ " + controller.courseDetectError
+                : "已选：" + names.join("、")
+            color: controller.courseDetectState === "error" && names.length === 0 ? Theme.danger : Theme.muted
+            font.family: Theme.uiFont
+            font.pixelSize: 12
+            elide: Text.ElideRight
         }
 
         Label { text: "视频速度"; color: Theme.muted; font.pixelSize: 12 }

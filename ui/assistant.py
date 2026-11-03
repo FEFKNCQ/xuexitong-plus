@@ -55,6 +55,8 @@ class LocalAI(QObject):
         if controller is not None:
             controller.dashboardChanged.connect(self.contextChanged)
             controller.workChanged.connect(self.contextChanged)
+            controller.coursesChanged.connect(self.contextChanged)
+            controller.configChanged.connect(self.contextChanged)
         self._store = localai.ReviewStore(self._data_dir)
         self._log = LogModel(limit=600, parent=self)
         self._jobs: set[_Job] = set()
@@ -340,7 +342,11 @@ class LocalAI(QObject):
     contextChanged = Signal()
 
     def _course(self) -> str:
-        return str(getattr(self._controller, "_course", "") or "")
+        # The course being studied right now; otherwise the courses picked via "识别课程".
+        current = str(getattr(self._controller, "_course", "") or "")
+        if current or self._controller is None:
+            return current
+        return "、".join(self._controller.selected_course_names())
 
     def _chapter(self) -> str:
         work = getattr(self._controller, "_work", None) or {}

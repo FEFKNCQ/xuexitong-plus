@@ -31,6 +31,7 @@ from ui.output_parser import (
     LogEvent,
     OutputParser,
     StreamDecoder,
+    strip_ansi,
     ProgressEvent,
     PromptEvent,
     VideoPreviewEvent,
@@ -201,6 +202,11 @@ class AppController(QObject):
 
         self._updater = Updater(APP_VERSION, self)
         from ui.videoproxy import VideoProxy
+
+        self._course_state = "idle"     # idle | running | done | error
+        self._course_error = ""
+        self._course_process = None
+        self._known_courses = self._load_known_courses()
 
         self._video_proxy = VideoProxy()
 
@@ -479,17 +485,120 @@ class AppController(QObject):
     def _log(self, level: str, message: str, stamp: str = "") -> None:
         self._log_model.append(level, message, stamp or time.strftime("%H:%M:%S"))
 
-    def _worker_command(self) -> tuple[Path, list[str]] | None:
+    def _worker_command(self, mode: str = "--worker") -> tuple[Path, list[str]] | None:
+        args = [mode, str(CONFIG_PATH), str(DATA_DIR)]
         fake = os.environ.get("CHAOXING_DESKTOP_FAKE_WORKER")
         if fake and not getattr(sys, "frozen", False):
-            return Path(sys.executable), [fake, "--worker", str(CONFIG_PATH), str(DATA_DIR)]
+            return Path(sys.executable), [fake, *args]
         if getattr(sys, "frozen", False):
             program = BUNDLE_DIR / "chaoxing-worker.exe"
             if not program.exists():
                 self.toast.emit(f"找不到任务运行组件：{program}", "error")
                 return None
-            return program, ["--worker", str(CONFIG_PATH), str(DATA_DIR)]
-        return Path(sys.executable), [str(BUNDLE_DIR / "worker.py"), "--worker", str(CONFIG_PATH), str(DATA_DIR)]
+            return program, args
+        return Path(sys.executable), [str(BUNDLE_DIR / "worker.py"), *args]
+
+    # ----- course recognition ("识别课程") ---------------------------------
+    coursesChanged = Signal()
+    coursesDetected = Signal("QVariantList")
+
+    courseDetectState = Property(str, lambda self: self._course_state, notify=coursesChanged)
+    courseDetectError = Property(str, lambda self: self._course_error, notify=coursesChanged)
+    knownCourses = Property("QVariantList", lambda self: self._known_courses, notify=coursesChanged)
+
+    def _load_known_courses(self) -> list[dict]:
+        import json
+
+        try:
+            data = json.loads(str(self._settings.value("courses/known", "[]")))
+        except ValueError:
+            return []
+        return [c for c in data if isinstance(c, dict) and c.get("courseId")]
+
+    def selected_course_names(self) -> list[str]:
+        """Titles of the courses in course_list (from the last recognition)."""
+        ids = [i.strip() for i in self._values.get("course_list", "").split(",") if i.strip()]
+        names = {c["courseId"]: c.get("title", "") for c in self._known_courses}
+        return [names[i] for i in ids if names.get(i)]
+
+    @Slot()
+    def detectCourses(self) -> None:
+        """Log in with the saved account and read the course list (worker --list-courses)."""
+        if self._course_state == "running" or self._process is not None:
+            return
+        v = self._values
+        if not v["use_cookies"] and (not v["username"].strip() or not v["password"]):
+            self.toast.emit("请先在设置中填写账号和密码，或开启 cookies 登录。", "warning")
+            return
+        if not self.saveConfig():
+            return
+        command = self._worker_command("--list-courses")
+        if command is None:
+            return
+        program, arguments = command
+        process = QProcess(self)
+        process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        environment = QProcessEnvironment.systemEnvironment()
+        environment.insert("PYTHONUTF8", "1")
+        environment.insert("PYTHONUNBUFFERED", "1")
+        process.setProcessEnvironment(environment)
+        process.setWorkingDirectory(str(DATA_DIR))
+        decoder = StreamDecoder()
+        buffer: list[str] = []
+        process.readyReadStandardOutput.connect(
+            lambda: buffer.append(decoder.decode(bytes(process.readAllStandardOutput()))))
+        process.finished.connect(lambda code, _s: self._on_courses_finished(process, buffer, decoder, code))
+        process.errorOccurred.connect(
+            lambda err: self._on_courses_finished(process, buffer, decoder, -1)
+            if err == QProcess.ProcessError.FailedToStart else None)
+        self._course_state, self._course_error = "running", ""
+        self.coursesChanged.emit()
+        self._log("INFO", "正在登录并识别课程…")
+        process.start(str(program), arguments)
+        self._course_process = process
+        QTimer.singleShot(90_000, lambda: process.kill() if process.state() != QProcess.ProcessState.NotRunning else None)
+
+    def _on_courses_finished(self, process, buffer, decoder, code) -> None:
+        import json
+
+        if self._course_process is not process:
+            return
+        self._course_process = None
+        buffer.append(decoder.decode(bytes(process.readAllStandardOutput()), final=True))
+        process.deleteLater()
+        payload = None
+        for line in "".join(buffer).splitlines():
+            line = strip_ansi(line).strip()
+            if line.startswith("__CX_COURSES__"):
+                try:
+                    payload = json.loads(line[len("__CX_COURSES__"):])
+                except ValueError:
+                    payload = None
+        if not payload or not payload.get("ok"):
+            self._course_state = "error"
+            self._course_error = (payload or {}).get("error") or f"识别失败（任务组件退出代码 {code}）"
+            self._log("ERROR", f"识别课程失败：{self._course_error}")
+            self.toast.emit(f"识别课程失败：{self._course_error}", "error")
+            self.coursesChanged.emit()
+            return
+        courses = payload.get("courses") or []
+        self._known_courses = courses
+        self._settings.setValue("courses/known", json.dumps(courses, ensure_ascii=False))
+        self._course_state = "done"
+        self._log("SUCCESS", f"识别到 {len(courses)} 门课程")
+        self.coursesChanged.emit()
+        self.coursesDetected.emit(courses)
+
+    @Slot("QVariantList")
+    def chooseCourses(self, course_ids) -> None:
+        """Selection from the 识别课程 dialog -> course_list (empty = all courses)."""
+        ids = []
+        for i in course_ids:
+            i = str(i).strip()
+            if i and i not in ids:
+                ids.append(i)
+        self.courseList = ",".join(ids)
+        self.coursesChanged.emit()
 
     @Slot()
     def startRun(self) -> None:
