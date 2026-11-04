@@ -1,3 +1,10 @@
+> **下载说明**
+> 优先推荐从百度网盘下载（含完整 release 文件，可用提取码获取），无需访问 GitHub：
+> **百度网盘**：https://pan.baidu.com/s/1NODZh4V8D01CowfqxFDv9w?pwd=punj
+>
+> **夸克网盘**：https://pan.quark.cn/s/675d99eeaa3a
+>
+> 也可在 [本仓库 Releases](https://github.com/FEFKNCQ/xuexitong-plus/releases) 下载。
 > **涓嬭浇璇存槑**
 > 浼樺厛鎺ㄨ崘浠庣櫨搴︾綉鐩樹笅杞斤紙鍚畬鏁?release 鏂囦欢锛屽彲鐢ㄦ彁鍙栫爜鑾峰彇锛夛紝鏃犻渶璁块棶 GitHub锛歚n> **鐧惧害缃戠洏**锛?baidu
 >
