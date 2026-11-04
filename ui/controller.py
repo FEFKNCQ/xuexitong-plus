@@ -42,7 +42,7 @@ from ui.output_parser import (
 )
 
 APP_NAME = "学习通PLUS"
-APP_VERSION = "1.1.7"
+APP_VERSION = "1.1.8"
 # Bump whenever the 开始引导 changes: everyone who finished an older guide sees it again.
 # 1: 欢迎 / 免责声明 / 账号 / 开始使用   2: + 答题设置 (1.1.7)
 ONBOARDING_VERSION = 2
