@@ -94,6 +94,31 @@ class AdvancedOptionsTest(unittest.TestCase):
         self.assertEqual(advanced.ai_config_problem({**ok, "tiku.key": "", "tiku.endpoint": "http://127.0.0.1:9931/v1"}), "")
         self.assertIn("硅基流动", advanced.ai_config_problem({"tiku.provider": "SiliconFlow", "tiku.siliconflow_key": ""}))
 
+    def test_every_worker_key_has_a_control(self):
+        import re
+        root = Path(__file__).resolve().parent.parent
+        pattern = re.compile(r"(?:common_config|tiku_config|_conf)(?:\.get)?[\[(][\"']([a-z_]+)[\"']")
+        read = set()
+        for path in [root / "main.py", *(root / "api").glob("*.py")]:
+            read |= set(pattern.findall(path.read_text(encoding="utf-8")))
+        offered = {f["key"] for f in advanced.fields()}
+        elsewhere = {  # 运行面板 / 设置页其它卡片
+            "username", "password", "use_cookies", "course_list", "speed", "jobs", "notopen_action",
+            "retry_interval", "add_learning_count", "target_count",
+        }
+        console_only = {"manual_mode_default", "manual_mode_separator"}  # 手动答题需要控制台输入
+        self.assertEqual(read - offered - elsewhere - console_only, set())
+
+    def test_like_switches_parse_false(self):
+        from api.answer import TikuLike
+        like = TikuLike()
+        like._conf = {"likeapi_search": "false", "likeapi_vision": "false", "likeapi_retry": "false", "likeapi_retry_times": "2"}
+        like.load_config()
+        self.assertEqual((like._search, like._vision, like._retry, like._retry_times), (False, False, False, 2))
+        like._conf = {}
+        like.load_config()
+        self.assertEqual((like._search, like._vision, like._retry), (False, True, True))
+
     def test_normalize(self):
         self.assertEqual(advanced.normalize("x", True), "true")
         self.assertEqual(advanced.normalize("x", False), "false")

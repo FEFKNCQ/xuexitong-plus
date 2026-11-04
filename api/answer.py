@@ -1141,10 +1141,15 @@ class TikuLike(Tiku):
 
     def load_config(self) -> None:
         # 从配置中获取参数，提供默认值
-        self._search = self._conf.get('likeapi_search', False)
+        # config.ini 里的值是字符串，"false" 不能直接当真值用
+        def _flag(key, default):
+            value = self._conf.get(key, default)
+            return value if isinstance(value, bool) else str(value).strip().lower() in ('true', '1', 'yes', 'on')
+
+        self._search = _flag('likeapi_search', False)
         self._model = self._conf.get('likeapi_model', None)
-        self._vision = self._conf.get('likeapi_vision', True)
-        self._retry = self._conf.get("likeapi_retry", True)
+        self._vision = _flag('likeapi_vision', True)
+        self._retry = _flag("likeapi_retry", True)
         self._retry_times = int(self._conf.get("likeapi_retry_times", 3))
 
     def _init_tiku(self) -> None:
