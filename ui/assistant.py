@@ -335,6 +335,7 @@ class LocalAI(QObject):
     errorText = Property(str, lambda self: self._error, notify=outputChanged)
     analysis = Property(str, lambda self: localai.split_answer(self._output)[0], notify=outputChanged)
     answer = Property(str, lambda self: localai.split_answer(self._output)[1], notify=outputChanged)
+    thinking = Property(int, lambda self: getattr(self, "_thinking", 0), notify=outputChanged)
     currentId = Property(str, lambda self: self._current_id, notify=outputChanged)
     questionText = Property(str, lambda self: self._question_text, notify=outputChanged)
 
@@ -400,6 +401,7 @@ class LocalAI(QObject):
             return
         self._question_text = localai.format_question(question) + ("\n（附图）" if image_path else "")
         self._output = ""
+        self._thinking = 0
         self._error = ""
         self._current_id = ""
         self._busy = True
@@ -410,12 +412,16 @@ class LocalAI(QObject):
         self._log_line("INFO", f"开始推理（{len(question.get('options') or [])} 个选项{'，含图片' if image_path else ''}）")
 
         def work(emit):
-            for delta in localai.stream_chat(base, messages, settings, cancel=cancel):
+            for delta in localai.stream_chat(base, messages, settings, cancel=cancel,
+                                             on_reasoning=lambda n: emit(("thinking", n))):
                 emit(delta)
             return cancel.is_set()
 
         def on_chunk(delta):
-            self._output += delta
+            if isinstance(delta, tuple):          # reasoning model still thinking
+                self._thinking = delta[1]
+            else:
+                self._output += delta
             self.outputChanged.emit()
 
         def done(cancelled):
@@ -423,12 +429,16 @@ class LocalAI(QObject):
             seconds = max(0.01, time.monotonic() - started)
             if cancelled:
                 self._log_line("WARNING", "已取消推理")
-            elif self._output.strip():
+            elif localai.strip_thinking(self._output).strip():
                 analysis, answer = localai.split_answer(self._output)
                 item = self._store.add(self._question_text, analysis, answer, self._model)
                 self._current_id = item.id
                 self.historyChanged.emit()
                 self._log_line("SUCCESS", f"推理完成，{len(self._output)} 字，用时 {seconds:.1f} 秒（约 {len(self._output) / seconds:.0f} 字/秒），等待人工审核")
+            elif self._thinking:
+                self._error = (f"模型思考了 {self._thinking} 字，用完了最大输出 token（{settings.max_tokens}）还没写出答案。"
+                               "请在“模型设置”里调大“最大输出 token”后重试")
+                self._log_line("WARNING", self._error)
             else:
                 self._error = "模型没有返回内容"
                 self._log_line("WARNING", self._error)

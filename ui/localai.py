@@ -48,12 +48,29 @@ VERSION_RE = re.compile(r"version[:\s]+([0-9]+)(?:\s*\(([0-9a-f]+)\))?", re.IGNO
 ANSWER_HEADING_RE = re.compile(r"^\s*(?:#+\s*)?(?:\*\*)?\s*参考答案\s*[:：]?\s*(?:\*\*)?\s*[:：]?\s*", re.MULTILINE)
 
 SYSTEM_PROMPT = (
-    "你是一位耐心的学习辅导老师。用户会给你一道练习题，请帮助他理解这道题：\n"
-    "1. 先用“## 解析”作为标题，说明题目考查的知识点和解题思路，逐步推理；\n"
-    "2. 再用“## 参考答案”作为标题，给出你认为正确的答案，并用一两句话说明理由；\n"
-    "3. 如果题目信息不全或你没有把握，请明确说明不确定的地方，不要编造。\n"
-    "回答使用简体中文。你的答案只是学习参考，需要用户自己核对。"
+    "你是一位耐心、严谨的学习辅导老师，帮助学生真正弄懂一道练习题。请用简体中文，严格按下面的格式回答：\n\n"
+    "## 解析\n"
+    "- 考点：一句话说明这道题考查的知识点。\n"
+    "- 思路：结合题目一步步推理。选择题逐个分析每个选项对或错、为什么；"
+    "判断题先找出题干里的关键说法，再说明它为什么成立或不成立；填空题和简答题先列出答题要点。\n\n"
+    "## 参考答案\n"
+    "先写答案（选择题写选项字母和内容，判断题写“正确”或“错误”），再用一两句话说明理由。\n\n"
+    "要求：\n"
+    "1. 给出了课程和章节时，结合这门课的内容理解题目；\n"
+    "2. 只依据你有把握的知识，题目信息不全、说法有争议或你不确定时，直接写明不确定的地方，不要编造；\n"
+    "3. 不要输出与题目无关的内容，全文控制在 400 字以内；\n"
+    "4. 你的答案只是学习参考，最终需要学生自己核对。"
 )
+
+# What each question type expects, added to the question so the model does not guess the format.
+TYPE_HINTS = {
+    "单选题": "只有一个正确选项",
+    "多选题": "有两个或以上正确选项，请逐项判断",
+    "判断题": "回答“正确”或“错误”",
+    "填空题": "给出每个空应填的内容",
+}
+# Reasoning models may also think inline; that text is not part of the answer.
+THINK_RE = re.compile(r"<think>.*?(?:</think>|$)", re.DOTALL | re.IGNORECASE)
 
 
 # ---------------------------------------------------------------- settings
@@ -69,7 +86,7 @@ class AiSettings:
     gpu_layers: int = 0
     threads: int = 0               # 0 = llama.cpp default
     temperature: float = 0.3
-    max_tokens: int = 1024
+    max_tokens: int = 2048         # reasoning models spend part of it thinking
     extra_args: str = ""           # passed through to llama-server, space separated
 
     @classmethod
@@ -235,7 +252,9 @@ def format_question(q: dict) -> str:
         lines.append(f"课程：{q['course']}")
     if q.get("chapter"):
         lines.append(f"章节：{q['chapter']}")
-    lines += [f"题型：{q.get('type') or '题目'}", f"题目：{q.get('title') or '（见图片）'}"]
+    kind = q.get('type') or '题目'
+    lines.append(f"题型：{kind}" + (f"（{TYPE_HINTS[kind]}）" if kind in TYPE_HINTS else ""))
+    lines.append(f"题目：{q.get('title') or '（见图片）'}")
     if q.get("options"):
         lines.append("选项：")
         lines += [f"  {opt}" for opt in q["options"]]
@@ -258,8 +277,14 @@ def build_messages(question: dict, image_path: str = "") -> list[dict]:
     return [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": content}]
 
 
+def strip_thinking(text: str) -> str:
+    """Drop <think>...</think> (also an unfinished one while it is still streaming)."""
+    return THINK_RE.sub("", text or "")
+
+
 def split_answer(text: str) -> tuple[str, str]:
     """Model output -> (analysis, reference answer). Falls back to all-analysis."""
+    text = strip_thinking(text)
     match = ANSWER_HEADING_RE.search(text or "")
     if not match:
         return (text or "").strip(), ""
@@ -338,8 +363,15 @@ def iter_sse(lines: Iterable[bytes]) -> Iterator[dict]:
 
 
 def stream_chat(base_url: str, messages: list[dict], settings: AiSettings,
-                cancel: threading.Event | None = None, timeout: float = 300.0) -> Iterator[str]:
-    """Yield content deltas from /v1/chat/completions (stream=true)."""
+                cancel: threading.Event | None = None, timeout: float = 300.0,
+                on_reasoning=None) -> Iterator[str]:
+    """Yield content deltas from /v1/chat/completions (stream=true).
+
+    Reasoning models send their thinking separately (``reasoning_content``); it is not
+    part of the answer, but ``on_reasoning(total_chars)`` reports it so the UI can show
+    that the model is working.
+    """
+    thought = 0
     payload = {"messages": messages, "stream": True, "temperature": settings.temperature,
                "max_tokens": settings.max_tokens}
     with _open(base_url + "/v1/chat/completions", payload, timeout=timeout) as resp:
@@ -349,7 +381,12 @@ def stream_chat(base_url: str, messages: list[dict], settings: AiSettings,
             if "error" in chunk:
                 raise AiError(_error_message(json.dumps(chunk)) or "模型返回错误")
             for choice in chunk.get("choices") or []:
-                delta = (choice.get("delta") or {}).get("content") or ""
+                part = choice.get("delta") or {}
+                reasoning = part.get("reasoning_content") or ""
+                if reasoning and on_reasoning is not None:
+                    thought += len(reasoning)
+                    on_reasoning(thought)
+                delta = part.get("content") or ""
                 if delta:
                     yield delta
 

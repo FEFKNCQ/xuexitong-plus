@@ -464,6 +464,14 @@ Item {
                             font.pixelSize: 12
                             wrapMode: Text.Wrap
                         }
+                        Text {
+                            visible: ai.busy && page.showAnalysis === "" && page.showAnswer === ""
+                            Layout.fillWidth: true
+                            text: ai.thinking > 0 ? "模型正在思考…（已思考 " + ai.thinking + " 字）" : "等待模型输出…"
+                            color: Theme.muted
+                            font.family: Theme.uiFont
+                            font.pixelSize: 12
+                        }
                         Text { visible: page.showAnalysis !== ""; text: "解析"; color: Theme.text; font.family: Theme.uiFont; font.pixelSize: 13; font.weight: Font.DemiBold }
                         Text {
                             visible: page.showAnalysis !== ""
