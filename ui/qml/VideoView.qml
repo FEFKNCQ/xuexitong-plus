@@ -129,7 +129,7 @@ Rectangle {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: !root.suspended && !root.revealing
-                text: "运行学习通视频任务后，画面会自动显示"
+                text: controller.videoMessage.endsWith("已看完") ? "等待下一个视频任务" : "运行学习通视频任务后，画面会自动显示"
                 color: "#8e9bb3"
                 font.family: Theme.uiFont
                 font.pixelSize: 12

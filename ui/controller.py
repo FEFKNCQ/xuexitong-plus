@@ -803,6 +803,10 @@ class AppController(QObject):
             elif event.kind == "task_finished":
                 self._completed += 1
                 self._task_model.upsert(event.value, detail="已完成", done=True)
+                # The task's viewing time is done: stop the preview instead of letting it play on.
+                if self._video_active and event.value == self._video_title:
+                    message = f"{event.value} 已看完"
+                    self._set_video(video_message_html(message, "等待下一个视频任务"), event.value, False, message)
             self.dashboardChanged.emit()
         elif isinstance(event, ProgressEvent):
             self._task_model.upsert(event.name, percent=event.percent, detail=f"{event.done} / {event.total}")
