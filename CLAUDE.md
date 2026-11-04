@@ -28,6 +28,7 @@
   - 题目来源：当前章节检测（来自运行面板的预览数据，自动带上识别到的课程和章节）、手动粘贴（自动拆出题干和选项）、图片（需要 mmproj，多模态）。
   - 测试：`tests/test_localai.py` 用 `tests/fake_llama_server.py` 模拟 llama-server，覆盖检测、启动、加载等待、连接测试、流式推理、错误、崩溃退出、审核门槛。
 - `ui/advanced.py` + `ui/qml/AdvancedOptions.qml`：设置页“高级选项”，把 config.ini 里基本设置没覆盖的键（题库 provider 及各题库参数、提交与覆盖率、查题间隔、重做、判断题词表、通知推送）做成控件。字段表在 `advanced.GROUPS`，值按 config.ini 的字符串存取，随“保存”一起写回；文件里没有的键只有改过默认值才会写入。新增 worker 读取的配置键时在这里加字段，`tests/test_advanced.py` 会检查 provider 名在 `api/answer.py` / `api/notification.py` 中存在。
+- `ui/localmodels.py`：高级选项里“自动检测本机模型”。候选端口 = 常见默认端口（llama.cpp 8080、Ollama 11434、LM Studio 1234、vLLM 8000、5000/5001）+ 当前接口地址的端口 + 本机所有监听端口；对每个端口请求 `http://127.0.0.1:<端口>/v1/models`（不走代理，并发、短超时）。监听端口要同时问 `netstat` 和 PowerShell `Get-NetTCPConnection`：实测有 llama-server 只有后者能看到，状态列也可能是空的/本地化的，所以按“远端端口为 0”判断监听。llama.cpp 返回的模型名是 .gguf 路径，取文件名作为模型名称。
 - `ui/videoproxy.py`：视频预览的本地代理（只监听 127.0.0.1，只代理已登记的 `*.chaoxing.com` / `*.cldisk.com` 地址；视频 CDN 实际在 `s1/s2.cldisk.com`）。WebView2 的 `loadHtml()` 实际是 data: URL，CDN 收不到学习通的 Referer 会拒绝视频；现在预览页面和视频都由代理提供，代理转发时带上 Referer 并透传 Range。
 - `ui/tray.py`：后台模式（系统托盘 + 单实例）。关闭窗口默认隐藏到托盘，任务继续；再次启动程序会唤出已运行的窗口。所有真正退出的路径都走 `Main.qml` 的 `quitApp()`。
 - 编码：打包版 worker 不认 `PYTHONUTF8`，`worker.py` 启动时强制 stdout/stderr 为 UTF-8；GUI 用 `StreamDecoder` 增量解码，遇到非 UTF-8 自动改用 GB18030。

@@ -97,7 +97,7 @@ Card {
                             sourceComponent: ({
                                 heading: headingField, switch: switchField, number: numberField,
                                 percent: percentField, choice: choiceField, providers: providersField,
-                                text: textField, secret: textField
+                                text: textField, secret: textField, localmodels: localModelsField
                             })[modelData.type]
                         }
                     }
@@ -147,6 +147,88 @@ Card {
                 font.family: Theme.uiFont
                 font.pixelSize: 12
                 font.weight: Font.DemiBold
+            }
+        }
+    }
+
+    // 自动检测本机模型: finds llama.cpp / Ollama / LM Studio ... on this computer and fills
+    // 接口地址 and 模型名称 with one click (ui/localmodels.py).
+    Component {
+        id: localModelsField
+        ColumnLayout {
+            id: lm
+            readonly property var field: parent ? parent.field : ({})
+            readonly property string state: controller.localModelState
+            readonly property var found: controller.localModels
+            spacing: 8
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+                AppButton {
+                    text: lm.state === "running" ? "正在检测…" : "自动检测本机模型"
+                    glyph: ""
+                    enabled: lm.state !== "running"
+                    onClicked: controller.detectLocalModels()
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: lm.state === "running" ? "正在查找本机运行的模型服务"
+                        : lm.state !== "done" ? "在本机运行 llama.cpp、Ollama、LM Studio 等时，可自动填写接口地址和模型名称"
+                        : lm.found.length === 0 ? "没有找到本机模型服务，请先启动模型服务再检测"
+                        : "找到 " + lm.found.length + " 个模型，点“使用”自动填写"
+                    color: lm.state === "done" && lm.found.length === 0 ? Theme.warning : Theme.muted
+                    font.family: Theme.uiFont
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                }
+            }
+            Repeater {
+                model: lm.found
+                Rectangle {
+                    id: modelRow
+                    required property var modelData
+                    readonly property bool inUse: adv.value("tiku.endpoint") === modelData.endpoint
+                                                 && adv.value("tiku.model") === modelData.model
+                    Layout.fillWidth: true
+                    implicitHeight: 46
+                    radius: Theme.radius
+                    color: inUse ? Theme.accentSoft : Theme.sunken
+                    border.color: inUse ? Theme.accent : "transparent"
+                    Behavior on color { ColorAnimation { duration: Theme.fast } }
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 8
+                        spacing: 10
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 1
+                            Text {
+                                Layout.fillWidth: true
+                                text: modelRow.modelData.model
+                                color: Theme.text
+                                font.family: Theme.uiFont
+                                font.pixelSize: 13
+                                font.weight: Font.DemiBold
+                                elide: Text.ElideMiddle
+                            }
+                            Text {
+                                text: modelRow.modelData.endpoint + (modelRow.modelData.server ? " · " + modelRow.modelData.server : "")
+                                color: Theme.muted
+                                font.family: Theme.uiFont
+                                font.pixelSize: 11
+                            }
+                        }
+                        AppButton {
+                            text: modelRow.inUse ? "已使用" : "使用"
+                            glyph: modelRow.inUse ? "" : ""
+                            kind: modelRow.inUse ? "ghost" : "primary"
+                            enabled: !modelRow.inUse
+                            implicitHeight: 30
+                            onClicked: controller.useLocalModel(modelRow.modelData.endpoint, modelRow.modelData.model)
+                        }
+                    }
+                }
             }
         }
     }

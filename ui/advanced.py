@@ -88,7 +88,7 @@ def _f(section, key, type_, label, default="", hint="", **extra) -> dict:
             "label": label, "hint": hint, "default": default, **extra}
 
 
-# type: providers | switch | percent | number | choice | text | secret | heading
+# type: providers | switch | percent | number | choice | text | secret | heading | localmodels
 GROUPS: list[dict] = [
     {
         "id": "tiku",
@@ -127,6 +127,7 @@ GROUPS: list[dict] = [
             _f("tiku", "url", "text", "服务地址", "", "例如 http://127.0.0.1:8060/adapter-service/search",
                show={"key": "tiku.provider", "has": ["TikuAdapter"]}),
             _f("tiku", "", "heading", "OpenAI 兼容接口", show={"key": "tiku.provider", "has": ["AI"]}),
+            _f("tiku", "", "localmodels", "本机模型", show={"key": "tiku.provider", "has": ["AI"]}),
             _f("tiku", "endpoint", "text", "接口地址", "", "通常要带 /v1，例如 https://api.example.com/v1",
                show={"key": "tiku.provider", "has": ["AI"]}),
             _f("tiku", "key", "secret", "API Key", "", "本机运行的模型服务（127.0.0.1 / localhost）可以留空",
@@ -234,7 +235,7 @@ def answer_setup_problem(values: dict[str, str]) -> str:
 
 
 def fields() -> list[dict]:
-    return [f for g in GROUPS for f in g["fields"] if f["type"] != "heading"]
+    return [f for g in GROUPS for f in g["fields"] if f["type"] not in ("heading", "localmodels")]
 
 
 def read_values(config: configparser.ConfigParser) -> dict[str, str]:

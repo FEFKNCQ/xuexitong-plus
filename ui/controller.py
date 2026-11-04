@@ -7,6 +7,7 @@ import configparser
 import html
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -24,7 +25,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 
-from ui import advanced
+from ui import advanced, localmodels
 from ui.models import LogModel, TaskModel
 from ui.output_parser import (
     ActivityEvent,
@@ -172,6 +173,8 @@ def _config_property(key: str, type_, default, notify):
 
 class AppController(QObject):
     configChanged = Signal()
+    localModelsChanged = Signal()
+    _localModelsFound = Signal(list)   # emitted from the detection thread
     dirtyChanged = Signal()
     runStateChanged = Signal()
     dashboardChanged = Signal()
@@ -207,6 +210,9 @@ class AppController(QObject):
         self._video_page = ""
         self._video_title = ""
         self._video_pos = -1.0          # task position of the previewed video, seconds (-1 unknown)
+        self._local_models: list[dict] = []
+        self._local_state = "idle"      # idle | running | done
+        self._localModelsFound.connect(self._on_local_models)
         self._video_active = False
         self._work: dict = {}
         self._work_status = ""
@@ -288,6 +294,32 @@ class AppController(QObject):
 
     # 开始引导的“答题设置”一步：缺什么必填项（空字符串表示可以继续）。
     answerSetupProblem = Property(str, lambda self: advanced.answer_setup_problem(self._advanced), notify=configChanged)
+
+    # ----- 自动检测本机模型 (高级选项 → 答题来源 → OpenAI 兼容接口) -----------
+    localModels = Property("QVariantList", lambda self: self._local_models, notify=localModelsChanged)
+    localModelState = Property(str, lambda self: self._local_state, notify=localModelsChanged)
+
+    @Slot()
+    def detectLocalModels(self) -> None:
+        if self._local_state == "running":
+            return
+        self._local_state = "running"
+        self.localModelsChanged.emit()
+        extra = [p for p in (localmodels.port_of(self._advanced.get("tiku.endpoint", "")),) if p]
+        threading.Thread(target=lambda: self._localModelsFound.emit(localmodels.detect(extra)),
+                         name="detect-local-models", daemon=True).start()
+
+    def _on_local_models(self, found: list) -> None:
+        # One row per model: [{endpoint, port, server, model}].
+        self._local_models = [{"endpoint": s["endpoint"], "port": s["port"], "server": s["server"], "model": m}
+                              for s in found for m in s["models"]]
+        self._local_state = "done"
+        self.localModelsChanged.emit()
+
+    @Slot(str, str)
+    def useLocalModel(self, endpoint: str, model: str) -> None:
+        self.setAdvanced("tiku.endpoint", endpoint)
+        self.setAdvanced("tiku.model", model)
 
     @Slot(str, result=str)
     def answerMode(self, provider: str) -> str:
