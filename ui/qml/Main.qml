@@ -11,6 +11,7 @@ ApplicationWindow {
     minimumWidth: 1140
     minimumHeight: 720
     visible: false
+    flags: Qt.Window | Qt.FramelessWindowHint
     title: controller.appName
     color: Theme.bg
     Behavior on color { ColorAnimation { duration: Theme.slow } }
@@ -38,22 +39,146 @@ ApplicationWindow {
         || closeConfirm.visible || promptDialog.visible || guide.visible || updateDialog.visible
 
     Component.onCompleted: {
+        window.width = Math.max(window.minimumWidth, windowSettings.width)
+        window.height = Math.max(window.minimumHeight, windowSettings.height)
+        if (windowSettings.maximized)
+            Qt.callLater(window.toggleMaximize)
         showGuide = !controller.onboardingDone
         controller.updater.checkOnStartup()
     }
 
     function openSettings() { window.page = 2 }
 
+    // Only the normal (not maximized) size is remembered.
     Settings {
+        id: windowSettings
         category: "window"
-        property alias width: window.width
-        property alias height: window.height
+        property int width: 1380
+        property int height: 880
+        property bool maximized: false
     }
+    Component.onDestruction: windowSettings.maximized = window.maximized
+    onWidthChanged: if (!window.maximized && visible) windowSettings.width = width
+    onHeightChanged: if (!window.maximized && visible) windowSettings.height = height
+
+    // ---------- own title bar (frameless window) ----------
+    // Windows' frame is replaced by the app's own 最小化 / 最大化 / 关闭. A frameless window that
+    // is maximized the usual way covers the taskbar, so 最大化 fills the screen's available area.
+    property bool maximized: false
+    property rect normalGeometry: Qt.rect(0, 0, 0, 0)
+    readonly property int titleHeight: 36
+
+    function toggleMaximize() {
+        if (window.maximized) {
+            window.maximized = false
+            window.x = normalGeometry.x; window.y = normalGeometry.y
+            window.width = normalGeometry.width; window.height = normalGeometry.height
+        } else {
+            normalGeometry = Qt.rect(window.x, window.y, window.width, window.height)
+            window.maximized = true
+            const s = window.screen
+            window.x = s.virtualX
+            window.y = s.virtualY
+            window.width = s.desktopAvailableWidth
+            window.height = s.desktopAvailableHeight
+        }
+    }
+
+    component CaptionButton: Rectangle {
+        id: cap
+        property string glyph: ""
+        property string tip: ""
+        property bool danger: false
+        signal clicked()
+        width: 46
+        height: window.titleHeight
+        color: !capHover.hovered ? "transparent"
+            : cap.danger ? "#c42b1c" : Theme.surfaceAlt
+        Behavior on color { ColorAnimation { duration: Theme.fast } }
+        HoverHandler { id: capHover }
+        TapHandler { onTapped: cap.clicked() }
+        ToolTip.visible: capHover.hovered && cap.tip !== ""
+        ToolTip.delay: 600
+        ToolTip.text: cap.tip
+        Text {
+            anchors.centerIn: parent
+            text: cap.glyph
+            font.family: Theme.iconFont
+            font.pixelSize: 10
+            color: capHover.hovered && cap.danger ? "white" : Theme.text
+        }
+    }
+
+    Item {
+        id: titleBar
+        z: 50
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: window.titleHeight
+        // Continues the navigation pane on the left, the page background on the right.
+        Rectangle { width: 208; height: parent.height; color: Theme.pane; Behavior on color { ColorAnimation { duration: Theme.slow } } }
+        DragHandler {
+            target: null
+            onActiveChanged: if (active) {
+                if (window.maximized) {
+                    // Dragging a maximized window restores it under the cursor, like Windows does.
+                    const ratio = point.position.x / window.width
+                    window.toggleMaximize()
+                    window.x = point.scenePosition.x + window.x - window.width * ratio
+                }
+                window.startSystemMove()
+            }
+        }
+        TapHandler {
+            onDoubleTapped: window.toggleMaximize()
+        }
+        Row {
+            anchors.right: parent.right
+            anchors.top: parent.top
+            CaptionButton { glyph: ""; tip: "最小化"; onClicked: window.showMinimized() }
+            CaptionButton {
+                glyph: window.maximized ? "" : ""
+                tip: window.maximized ? "向下还原" : "最大化"
+                onClicked: window.toggleMaximize()
+            }
+            CaptionButton { glyph: ""; tip: "关闭"; danger: true; onClicked: window.close() }
+        }
+    }
+
+    // Hairline frame so the window edge stays visible without the system border.
+    Rectangle {
+        z: 55
+        anchors.fill: parent
+        visible: !window.maximized
+        color: "transparent"
+        border.width: 1
+        border.color: Theme.borderStrong
+    }
+
+    // Resize from the edges and corners (the frameless window has no system border).
+    component ResizeEdge: MouseArea {
+        property int edges: 0
+        enabled: !window.maximized
+        hoverEnabled: true
+        acceptedButtons: Qt.LeftButton
+        onPressed: window.startSystemResize(edges)
+    }
+    readonly property int grip: 6
+    ResizeEdge { z: 60; edges: Qt.LeftEdge; cursorShape: Qt.SizeHorCursor; x: 0; y: grip; width: grip; height: parent.height - 2 * grip }
+    ResizeEdge { z: 60; edges: Qt.RightEdge; cursorShape: Qt.SizeHorCursor; x: parent.width - grip; y: grip; width: grip; height: parent.height - 2 * grip }
+    ResizeEdge { z: 60; edges: Qt.TopEdge; cursorShape: Qt.SizeVerCursor; x: grip; y: 0; width: parent.width - 2 * grip; height: 3 }
+    ResizeEdge { z: 60; edges: Qt.BottomEdge; cursorShape: Qt.SizeVerCursor; x: grip; y: parent.height - grip; width: parent.width - 2 * grip; height: grip }
+    ResizeEdge { z: 60; edges: Qt.LeftEdge | Qt.TopEdge; cursorShape: Qt.SizeFDiagCursor; x: 0; y: 0; width: grip; height: grip }
+    ResizeEdge { z: 60; edges: Qt.RightEdge | Qt.TopEdge; cursorShape: Qt.SizeBDiagCursor; x: parent.width - grip; y: 0; width: grip; height: grip }
+    ResizeEdge { z: 60; edges: Qt.LeftEdge | Qt.BottomEdge; cursorShape: Qt.SizeBDiagCursor; x: 0; y: parent.height - grip; width: grip; height: grip }
+    ResizeEdge { z: 60; edges: Qt.RightEdge | Qt.BottomEdge; cursorShape: Qt.SizeFDiagCursor; x: parent.width - grip; y: parent.height - grip; width: grip; height: grip }
 
     // Content fades and lifts in when the window first appears after the splash.
     Item {
         id: shell
         anchors.fill: parent
+        anchors.topMargin: window.titleHeight
         opacity: 0
         transform: Translate { id: shellShift; y: 14 }
 
