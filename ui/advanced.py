@@ -88,7 +88,8 @@ def _f(section, key, type_, label, default="", hint="", **extra) -> dict:
             "label": label, "hint": hint, "default": default, **extra}
 
 
-# type: providers | switch | percent | number | choice | text | secret | heading | localmodels
+# type: providers | switch | percent | number | choice | text | secret
+#       display only: heading | localmodels | aiprovider | modelpicker
 GROUPS: list[dict] = [
     {
         "id": "tiku",
@@ -128,11 +129,14 @@ GROUPS: list[dict] = [
                show={"key": "tiku.provider", "has": ["TikuAdapter"]}),
             _f("tiku", "", "heading", "OpenAI 兼容接口", show={"key": "tiku.provider", "has": ["AI"]}),
             _f("tiku", "", "localmodels", "本机模型", show={"key": "tiku.provider", "has": ["AI"]}),
+            _f("tiku", "", "aiprovider", "常用服务", show={"key": "tiku.provider", "has": ["AI"]}),
             _f("tiku", "endpoint", "text", "接口地址", "", "通常要带 /v1，例如 https://api.example.com/v1",
                show={"key": "tiku.provider", "has": ["AI"]}),
             _f("tiku", "key", "secret", "API Key", "", "本机运行的模型服务（127.0.0.1 / localhost）可以留空",
                show={"key": "tiku.provider", "has": ["AI"]}),
-            _f("tiku", "model", "text", "模型名称", "", show={"key": "tiku.provider", "has": ["AI"]}),
+            _f("tiku", "", "modelpicker", "选择模型", show={"key": "tiku.provider", "has": ["AI"]}),
+            _f("tiku", "model", "text", "模型名称", "", "可以从上面的列表选择，也可以直接填写",
+               show={"key": "tiku.provider", "has": ["AI"]}),
             _f("tiku", "http_proxy", "text", "代理", "",
                "可选，只在访问外网接口需要翻墙时填写，例如 http://127.0.0.1:7890。不要填模型服务自己的地址；接口在本机时会自动忽略",
                show={"key": "tiku.provider", "has": ["AI"]}),
@@ -234,8 +238,11 @@ def answer_setup_problem(values: dict[str, str]) -> str:
     return ""
 
 
+DISPLAY_ONLY = ("heading", "localmodels", "aiprovider", "modelpicker")
+
+
 def fields() -> list[dict]:
-    return [f for g in GROUPS for f in g["fields"] if f["type"] not in ("heading", "localmodels")]
+    return [f for g in GROUPS for f in g["fields"] if f["type"] not in DISPLAY_ONLY]
 
 
 def read_values(config: configparser.ConfigParser) -> dict[str, str]:

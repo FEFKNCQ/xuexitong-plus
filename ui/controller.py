@@ -25,7 +25,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 
-from ui import advanced, localmodels
+from ui import advanced, cloudmodels, localmodels
 from ui.models import LogModel, TaskModel
 from ui.output_parser import (
     ActivityEvent,
@@ -187,6 +187,8 @@ class AppController(QObject):
     configChanged = Signal()
     localModelsChanged = Signal()
     _localModelsFound = Signal(list)   # emitted from the detection thread
+    cloudModelsChanged = Signal()
+    _cloudModelsFound = Signal(list, str)   # (models, error) from the fetch thread
     dirtyChanged = Signal()
     runStateChanged = Signal()
     dashboardChanged = Signal()
@@ -225,6 +227,10 @@ class AppController(QObject):
         self._local_models: list[dict] = []
         self._local_state = "idle"      # idle | running | done
         self._localModelsFound.connect(self._on_local_models)
+        self._cloud_models: list[str] = []
+        self._cloud_state = "idle"      # idle | running | done | error
+        self._cloud_error = ""
+        self._cloudModelsFound.connect(self._on_cloud_models)
         self._video_active = False
         self._work: dict = {}
         self._work_status = ""
@@ -301,6 +307,8 @@ class AppController(QObject):
         text = advanced.normalize(field_id, value)
         if self._advanced[field_id] != text:
             self._advanced[field_id] = text
+            if field_id in ("tiku.endpoint", "tiku.key") and self._cloud_state != "running":
+                self._reset_cloud_models()   # the list belonged to the old address / key
             self._set_dirty(True)
             self.configChanged.emit()
 
@@ -327,6 +335,53 @@ class AppController(QObject):
                               for s in found for m in s["models"]]
         self._local_state = "done"
         self.localModelsChanged.emit()
+
+    # ----- 云端模型：常用服务、识别公司、获取模型列表 ------------------------
+    aiProviders = Property("QVariantList", lambda self: [{"id": p["id"], "name": p["name"], "endpoint": p["endpoint"]}
+                                                       for p in cloudmodels.PROVIDERS], constant=True)
+    cloudModels = Property("QVariantList", lambda self: self._cloud_models, notify=cloudModelsChanged)
+    cloudModelState = Property(str, lambda self: self._cloud_state, notify=cloudModelsChanged)
+    cloudModelError = Property(str, lambda self: self._cloud_error, notify=cloudModelsChanged)
+
+    @Slot(str, result=str)
+    def providerName(self, endpoint: str) -> str:
+        return cloudmodels.identify(endpoint)
+
+    @Slot(str)
+    def useProvider(self, endpoint: str) -> None:
+        self.setAdvanced("tiku.endpoint", endpoint)
+
+    def _reset_cloud_models(self) -> None:
+        if self._cloud_models or self._cloud_state != "idle":
+            self._cloud_models, self._cloud_state, self._cloud_error = [], "idle", ""
+            self.cloudModelsChanged.emit()
+
+    @Slot()
+    def fetchCloudModels(self) -> None:
+        if self._cloud_state == "running":
+            return
+        endpoint, key = self._advanced.get("tiku.endpoint", ""), self._advanced.get("tiku.key", "")
+        proxy = self._advanced.get("tiku.http_proxy", "")
+        self._cloud_state, self._cloud_error = "running", ""
+        self.cloudModelsChanged.emit()
+
+        def work():
+            try:
+                self._cloudModelsFound.emit(cloudmodels.list_models(endpoint, key, proxy), "")
+            except cloudmodels.ModelListError as exc:
+                self._cloudModelsFound.emit([], str(exc))
+
+        threading.Thread(target=work, name="fetch-cloud-models", daemon=True).start()
+
+    def _on_cloud_models(self, models: list, error: str) -> None:
+        self._cloud_models = list(models)
+        self._cloud_error = error
+        self._cloud_state = "error" if error else "done"
+        self.cloudModelsChanged.emit()
+
+    @Slot(str)
+    def useCloudModel(self, model: str) -> None:
+        self.setAdvanced("tiku.model", model)
 
     @Slot(str, str)
     def useLocalModel(self, endpoint: str, model: str) -> None:

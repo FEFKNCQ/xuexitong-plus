@@ -97,7 +97,8 @@ Card {
                             sourceComponent: ({
                                 heading: headingField, switch: switchField, number: numberField,
                                 percent: percentField, choice: choiceField, providers: providersField,
-                                text: textField, secret: textField, localmodels: localModelsField
+                                text: textField, secret: textField, localmodels: localModelsField,
+                                aiprovider: aiProviderField, modelpicker: modelPickerField
                             })[modelData.type]
                         }
                     }
@@ -229,6 +230,169 @@ Card {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // 常用服务: one click fills 接口地址; the provider is recognised from any address.
+    Component {
+        id: aiProviderField
+        ColumnLayout {
+            id: ap
+            readonly property var field: parent ? parent.field : ({})
+            readonly property string endpoint: adv.value("tiku.endpoint")
+            readonly property string company: controller.providerName(endpoint)
+            spacing: 6
+            Text { text: "常用服务"; color: Theme.text; font.family: Theme.uiFont; font.pixelSize: 13 }
+            Flow {
+                Layout.fillWidth: true
+                spacing: 6
+                Repeater {
+                    model: controller.aiProviders
+                    Rectangle {
+                        id: pchip
+                        required property var modelData
+                        readonly property bool on: ap.endpoint.replace(/\/+$/, "") === modelData.endpoint
+                        width: pname.implicitWidth + 22
+                        height: 30
+                        radius: 15
+                        color: on ? Theme.accentSoft : (phover.hovered ? Theme.surfaceAlt : Theme.surface)
+                        border.color: on ? Theme.accent : (phover.hovered ? Theme.borderStrong : Theme.border)
+                        Behavior on color { ColorAnimation { duration: Theme.fast } }
+                        HoverHandler { id: phover; cursorShape: Qt.PointingHandCursor }
+                        ToolTip.visible: phover.hovered
+                        ToolTip.delay: 500
+                        ToolTip.text: modelData.endpoint
+                        TapHandler { onTapped: controller.useProvider(pchip.modelData.endpoint) }
+                        Text {
+                            id: pname
+                            anchors.centerIn: parent
+                            text: pchip.modelData.name
+                            color: pchip.on ? Theme.accent : Theme.text
+                            font.family: Theme.uiFont
+                            font.pixelSize: 12
+                            font.weight: pchip.on ? Font.DemiBold : Font.Normal
+                        }
+                    }
+                }
+            }
+            Text {
+                visible: ap.endpoint.trim() !== ""
+                Layout.fillWidth: true
+                text: ap.company !== "" ? "识别为：" + ap.company
+                    : "未识别的服务：只要兼容 OpenAI 接口即可使用"
+                color: ap.company !== "" ? Theme.accent : Theme.muted
+                font.family: Theme.uiFont
+                font.pixelSize: 12
+                wrapMode: Text.Wrap
+            }
+        }
+    }
+
+    // 选择模型: GET <接口地址>/models with the key, then pick from the list (searchable).
+    Component {
+        id: modelPickerField
+        ColumnLayout {
+            id: mp
+            readonly property var field: parent ? parent.field : ({})
+            readonly property string state: controller.cloudModelState
+            readonly property var models: controller.cloudModels
+            readonly property string current: adv.value("tiku.model")
+            readonly property var shownModels: {
+                const q = filter.text.trim().toLowerCase()
+                return q === "" ? models : models.filter(m => m.toLowerCase().indexOf(q) >= 0)
+            }
+            spacing: 8
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+                AppButton {
+                    text: mp.state === "running" ? "正在获取…" : mp.state === "done" ? "重新获取" : "获取模型列表"
+                    glyph: ""
+                    enabled: mp.state !== "running" && adv.value("tiku.endpoint").trim() !== ""
+                    onClicked: controller.fetchCloudModels()
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: mp.state === "running" ? "正在向服务查询可用的模型"
+                        : mp.state === "error" ? controller.cloudModelError
+                        : mp.state === "done" ? "共 " + mp.models.length + " 个模型，点一个即可使用"
+                        : "填好接口地址和 API Key 后，可以获取这个服务的全部模型"
+                    color: mp.state === "error" ? Theme.warning : Theme.muted
+                    font.family: Theme.uiFont
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                }
+            }
+            AppTextField {
+                id: filter
+                visible: mp.state === "done" && mp.models.length > 8
+                Layout.fillWidth: true
+                placeholderText: "搜索模型，例如 deepseek、qwen、glm"
+            }
+            Rectangle {
+                visible: mp.state === "done" && mp.models.length > 0
+                Layout.fillWidth: true
+                implicitHeight: Math.min(modelColumn.implicitHeight + 8, 236)
+                radius: Theme.radius
+                color: Theme.sunken
+                clip: true
+                Flickable {
+                    anchors.fill: parent
+                    anchors.margins: 4
+                    contentHeight: modelColumn.implicitHeight
+                    boundsBehavior: Flickable.StopAtBounds
+                    ScrollBar.vertical: ScrollBar {}
+                    Column {
+                        id: modelColumn
+                        width: parent.width
+                        spacing: 2
+                        Repeater {
+                            model: mp.shownModels
+                            Rectangle {
+                                id: mrow
+                                required property string modelData
+                                readonly property bool on: modelData === mp.current
+                                width: modelColumn.width
+                                height: 32
+                                radius: 6
+                                color: on ? Theme.accentSoft : (mhover.hovered ? Theme.surface : "transparent")
+                                HoverHandler { id: mhover; cursorShape: Qt.PointingHandCursor }
+                                TapHandler { onTapped: controller.useCloudModel(mrow.modelData) }
+                                Text {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 10
+                                    anchors.right: tick.left
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: mrow.modelData
+                                    color: mrow.on ? Theme.accent : Theme.text
+                                    font.family: Theme.uiFont
+                                    font.pixelSize: 13
+                                    font.weight: mrow.on ? Font.DemiBold : Font.Normal
+                                    elide: Text.ElideMiddle
+                                }
+                                Text {
+                                    id: tick
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: 10
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: mrow.on
+                                    text: ""
+                                    font.family: Theme.iconFont
+                                    font.pixelSize: 12
+                                    color: Theme.accent
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Text {
+                visible: mp.state === "done" && mp.models.length > 0 && mp.shownModels.length === 0
+                text: "没有匹配的模型"
+                color: Theme.faint
+                font.family: Theme.uiFont
+                font.pixelSize: 12
             }
         }
     }
