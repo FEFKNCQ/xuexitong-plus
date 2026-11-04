@@ -148,7 +148,7 @@ def load_config_from_file(config_path):
         if "retry_interval" in common_config:
             common_config["retry_interval"] = float(common_config["retry_interval"])
         else:
-            common_config["retry_interval"] = 1.0
+            common_config["retry_interval"] = 5.0
         if "work_max_retries" in common_config:
             try:
                 common_config["work_max_retries"] = int(common_config["work_max_retries"])

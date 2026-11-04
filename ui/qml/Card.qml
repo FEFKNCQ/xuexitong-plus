@@ -45,7 +45,7 @@ Rectangle {
         spacing: 12
 
         RowLayout {
-            visible: card.title !== "" || actionsRow.children.length > 0
+            visible: card.title !== "" || actionsRow.visibleChildren.length > 0
             Layout.fillWidth: true
             spacing: 10
 

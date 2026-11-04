@@ -11,6 +11,7 @@ Rectangle {
     property int step: 0
     property int direction: 1          // +1 forward, -1 back (drives the slide direction)
     property bool accountSkipped: false
+    property bool answerSkipped: false
     readonly property string disclaimer: "1. 本软件基于开源项目 Samueli924/chaoxing，遵循 GPL-3.0 协议，仅供学习交流使用，禁止用于任何盈利用途，修改或衍生版本必须同样开源。\n"
         + "2. 本软件与超星、学习通官方无任何关联，不代表其立场。\n"
         + "3. 使用自动化工具可能违反学习通的用户协议及所在学校的课程或学术诚信规定，可能导致账号受限、封禁或成绩作废。是否使用、如何使用由你自行判断，相关后果由你自行承担。\n"
@@ -30,7 +31,8 @@ Rectangle {
         return i
     }
     readonly property bool agreed: typed === target
-    readonly property var steps: ["欢迎", "免责声明", "账号", "开始使用"]
+    readonly property var steps: ["欢迎", "免责声明", "账号", "答题设置", "开始使用"]
+    readonly property int lastStep: steps.length - 1
     readonly property bool accountReady: controller.useCookies
         || (controller.username.trim() !== "" && controller.password !== "")
 
@@ -43,6 +45,7 @@ Rectangle {
         step = 0
         direction = 1
         accountSkipped = false
+        answerSkipped = false
         agreeInput.text = ""
         entrance.restart()
     }
@@ -53,8 +56,9 @@ Rectangle {
     }
 
     function next() {
-        if (step === 2) {
-            accountSkipped = false
+        if (step === 2 || step === 3) {
+            if (step === 2) accountSkipped = false
+            else answerSkipped = false
             if (!controller.saveConfig())
                 return
         }
@@ -65,6 +69,11 @@ Rectangle {
     function skipAccount() {
         accountSkipped = true
         go(3)
+    }
+
+    function skipAnswer() {
+        answerSkipped = true
+        go(lastStep)
     }
 
     onVisibleChanged: if (visible) entrance.restart()
@@ -397,9 +406,45 @@ Rectangle {
                     }
                 }
 
-                // 3 开始使用
+                // 3 答题设置: the 高级选项 card itself (答题来源 / 答题 / 通知推送)
                 Page {
                     pageIndex: 3
+                    ColumnLayout {
+                        anchors.fill: parent
+                        spacing: 10
+                        Text { text: "答题设置"; color: Theme.text; font.family: Theme.uiFont; font.pixelSize: 22; font.weight: Font.Bold }
+                        Text {
+                            Layout.fillWidth: true
+                            text: "选择章节检测用题库还是 AI 找答案，并填写对应的 TOKEN 或接口地址、API Key。之后都可以在“设置 → 高级选项”里修改。"
+                            color: Theme.muted
+                            font.family: Theme.uiFont
+                            font.pixelSize: 13
+                            lineHeight: 1.3
+                            wrapMode: Text.Wrap
+                        }
+                        ScrollView {
+                            id: answerScroll
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            contentWidth: availableWidth
+                            clip: true
+                            AdvancedOptions {
+                                width: answerScroll.availableWidth
+                                embedded: true
+                                title: ""
+                                subtitle: ""
+                                icon: ""
+                                padding: 2
+                                color: "transparent"
+                                border.width: 0
+                            }
+                        }
+                    }
+                }
+
+                // 4 开始使用
+                Page {
+                    pageIndex: 4
                     ColumnLayout {
                         anchors.fill: parent
                         spacing: 14
@@ -408,7 +453,7 @@ Rectangle {
                             id: doneBadge
                             width: 64; height: 64; radius: 32
                             color: guide.accountSkipped ? Theme.warningSoft : Theme.successSoft
-                            scale: guide.step === 3 ? 1 : 0.5
+                            scale: guide.step === guide.lastStep ? 1 : 0.5
                             Behavior on scale { NumberAnimation { duration: Theme.slow; easing.type: Easing.OutBack; easing.overshoot: 2 } }
                             Text {
                                 anchors.centerIn: parent
@@ -430,6 +475,9 @@ Rectangle {
                             text: guide.accountSkipped
                                 ? "你选择了稍后配置账号。\n开始运行前，请先到“设置 → 账号”填写账号密码，或开启 cookies 登录。运行面板顶部也会一直提醒你。"
                                 : (controller.useCookies ? "将使用本地 cookies 登录。" : "已保存账号 " + controller.username + "。")
+                                    + (guide.answerSkipped || controller.answerSetupProblem !== ""
+                                        ? "\n答题设置还没完成，章节检测找不到答案的题目会随机作答；可以在“设置 → 高级选项”里补上。"
+                                        : "\n答题设置已保存。")
                                     + "\n进入运行面板后，在左侧“基本参数”里选择课程和速度，再点击“开始运行”。"
                             color: Theme.muted
                             font.family: Theme.uiFont
@@ -451,9 +499,18 @@ Rectangle {
                     text: "上一步"
                     kind: "ghost"
                     glyph: ""
-                    onClicked: guide.go(guide.step === 3 && guide.accountSkipped ? 2 : guide.step - 1)
+                    onClicked: guide.go(guide.step - 1)
                 }
                 Item { Layout.fillWidth: true }
+                Text {
+                    visible: guide.step === 3 && controller.answerSetupProblem !== ""
+                    Layout.maximumWidth: 300
+                    text: " " + controller.answerSetupProblem
+                    color: Theme.warning
+                    font.family: Theme.uiFont
+                    font.pixelSize: 12
+                    elide: Text.ElideRight
+                }
                 Text {
                     visible: guide.step === 1 && !guide.agreed
                     text: guide.typedCount > 0 && !guide.onTrack ? "从第 " + (guide.matchedCount + 1) + " 个字开始不一致" : "写完声明后才能继续"
@@ -462,9 +519,9 @@ Rectangle {
                     font.pixelSize: 12
                 }
                 AppButton {
-                    visible: guide.step === 2
+                    visible: guide.step === 2 || guide.step === 3
                     text: "稍后配置"
-                    onClicked: guide.skipAccount()
+                    onClicked: guide.step === 2 ? guide.skipAccount() : guide.skipAnswer()
                 }
                 AppButton {
                     objectName: "nextButton"
@@ -472,6 +529,7 @@ Rectangle {
                     text: guide.step === 0 ? "开始设置" : "下一步"
                     kind: "primary"
                     enabled: (guide.step !== 1 || guide.agreed) && (guide.step !== 2 || guide.accountReady)
+                             && (guide.step !== 3 || controller.answerSetupProblem === "")
                     onClicked: guide.next()
                 }
                 AppButton {

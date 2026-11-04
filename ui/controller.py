@@ -238,16 +238,16 @@ class AppController(QObject):
         except (TypeError, ValueError):
             speed = "1"
         try:
-            retry_interval = float(common.get("retry_interval", "1.0"))
+            retry_interval = float(common.get("retry_interval", "5"))
         except (TypeError, ValueError):
-            retry_interval = 1.0
+            retry_interval = 5.0
         action = common.get("notopen_action", "retry")
         self._values = {
             "username": common.get("username", ""),
             "password": common.get("password", ""),
             "course_list": common.get("course_list", ""),
             "speed": speed if speed in SPEED_OPTIONS else "1",
-            "jobs": min(8, max(1, common.getint("jobs", fallback=4))),
+            "jobs": min(8, max(1, common.getint("jobs", fallback=1))),
             "notopen_action": action if action in ("retry", "continue") else "retry",
             "use_cookies": common.getboolean("use_cookies", fallback=False),
             "retry_interval": max(0.0, retry_interval),
@@ -265,10 +265,10 @@ class AppController(QObject):
     password = _config_property("password", str, "", configChanged)
     courseList = _config_property("course_list", str, "", configChanged)
     speed = _config_property("speed", str, "1", configChanged)
-    jobs = _config_property("jobs", int, 4, configChanged)
+    jobs = _config_property("jobs", int, 1, configChanged)
     notopenAction = _config_property("notopen_action", str, "retry", configChanged)
     useCookies = _config_property("use_cookies", bool, False, configChanged)
-    retryInterval = _config_property("retry_interval", float, 1.0, configChanged)
+    retryInterval = _config_property("retry_interval", float, 5.0, configChanged)
     addLearningCount = _config_property("add_learning_count", bool, False, configChanged)
     targetCount = _config_property("target_count", int, 100, configChanged)
 
@@ -285,6 +285,9 @@ class AppController(QObject):
             self._advanced[field_id] = text
             self._set_dirty(True)
             self.configChanged.emit()
+
+    # 开始引导的“答题设置”一步：缺什么必填项（空字符串表示可以继续）。
+    answerSetupProblem = Property(str, lambda self: advanced.answer_setup_problem(self._advanced), notify=configChanged)
 
     @Slot(str, result=str)
     def answerMode(self, provider: str) -> str:

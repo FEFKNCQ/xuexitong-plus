@@ -28,7 +28,9 @@ class AdvancedOptionsTest(unittest.TestCase):
         for group in advanced.GROUPS:
             for f in group["fields"]:
                 if "show" in f:
-                    self.assertIn(f["show"]["key"], ids, f)
+                    conditions = f["show"] if isinstance(f["show"], list) else [f["show"]]
+                    for condition in conditions:
+                        self.assertIn(condition["key"], ids, f)
 
     def test_provider_options_exist_in_worker(self):
         import api.answer as answer
@@ -50,7 +52,7 @@ class AdvancedOptionsTest(unittest.TestCase):
         values = advanced.read_values(template())
         self.assertEqual(values["notification.tg_chat_id"], "")
         self.assertEqual(values["tiku.provider"], "TikuAdapter")
-        self.assertEqual(values["tiku.cover_rate"], "0.9")
+        self.assertEqual(values["tiku.cover_rate"], "0.75")
 
     def test_defaults_not_added_but_changes_are(self):
         config = configparser.ConfigParser(interpolation=None)

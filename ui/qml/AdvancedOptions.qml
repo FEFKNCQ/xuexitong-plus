@@ -19,9 +19,12 @@ Card {
     function value(id) { return values[id] !== undefined ? values[id] : "" }
     function isOn(id) { return ["true", "1", "yes", "on"].indexOf(String(value(id)).toLowerCase()) >= 0 }
     function listOf(id) { return String(value(id)).split(",").map(s => s.trim()).filter(s => s !== "") }
+    // show: one condition or a list that must all hold (see ui/advanced.py).
     function shown(f) {
         const c = f.show
         if (!c) return true
+        if (c.key === undefined && c.length !== undefined)       // a list from Python is not a JS Array
+            return Array.prototype.every.call(c, one => shown({ show: one }))
         if (c.has !== undefined) { const l = listOf(c.key); return c.has.some(v => l.indexOf(v) >= 0) }
         if (c.eq !== undefined) return value(c.key) === c.eq
         if (c.ne !== undefined) return value(c.key) !== c.ne
@@ -29,8 +32,12 @@ Card {
         return true
     }
 
+    // Embedded in the 开始引导: no header row (title, icon, edit button).
+    property bool embedded: false
+
     actions: [
         IconButton {
+            visible: !adv.embedded
             glyph: ""
             tip: "用编辑器打开 config.ini"
             onClicked: controller.openConfigFile()

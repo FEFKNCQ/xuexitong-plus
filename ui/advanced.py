@@ -10,6 +10,7 @@ the QML side converts for switches, sliders and spin boxes. Pure Python, no Qt.
     {"key": "notification.provider", "eq": "Telegram"}
     {"key": "notification.provider", "ne": ""}
     {"key": "tiku.submit", "on": True}      switch is on
+    [cond, cond, ...]                       all of them
 """
 
 from __future__ import annotations
@@ -111,7 +112,8 @@ GROUPS: list[dict] = [
             _f("tiku", "likeapi_retry", "switch", "请求失败时重试", "true",
                show={"key": "tiku.provider", "has": ["TikuLike"]}),
             _f("tiku", "likeapi_retry_times", "number", "最多重试次数", "3",
-               min=1, max=10, step=1, decimals=0, suffix="次", show={"key": "tiku.likeapi_retry", "on": True}),
+               min=1, max=10, step=1, decimals=0, suffix="次",
+               show=[{"key": "tiku.provider", "has": ["TikuLike"]}, {"key": "tiku.likeapi_retry", "on": True}]),
             _f("tiku", "", "heading", "GO 题", show={"key": "tiku.provider", "has": ["TikuGo"]}),
             _f("tiku", "go_authorization", "secret", "授权码", "", "GO 题提供的 Authorization",
                show={"key": "tiku.provider", "has": ["TikuGo"]}),
@@ -155,9 +157,9 @@ GROUPS: list[dict] = [
         "fields": [
             _f("tiku", "submit", "switch", "达到覆盖率时提交", "true",
                "关闭则只保存答案，之后可以自己到学习通检查后提交。需要解锁下一章的章节必须提交"),
-            _f("tiku", "cover_rate", "percent", "最低题库覆盖率", "0.9",
+            _f("tiku", "cover_rate", "percent", "最低题库覆盖率", "0.75",
                "查到答案的题目占比达到这个值才提交，否则只保存", show={"key": "tiku.submit", "on": True}),
-            _f("tiku", "delay", "number", "查题间隔", "1.0", "每查一道题后等待的时间",
+            _f("tiku", "delay", "number", "查题间隔", "2.0", "每查一道题后等待的时间",
                min=0, max=30, step=0.5, decimals=1, suffix="秒"),
             _f("common", "work_redo_enabled", "switch", "答错后自动重做", "false",
                "只在课程允许多次作答时开启"),
@@ -213,6 +215,21 @@ def ai_config_problem(values: dict[str, str]) -> str:
             return "答题方式用到了 AI，但还没填写 API Key"
     if "SiliconFlow" in picked and not values.get("tiku.siliconflow_key", "").strip():
         return "答题方式用到了硅基流动，但还没填写 API Key"
+    return ""
+
+
+def answer_setup_problem(values: dict[str, str]) -> str:
+    """Like ai_config_problem, plus 题库 that need a token / address to do anything."""
+    problem = ai_config_problem(values)
+    if problem:
+        return problem
+    picked = _split(values.get("tiku.provider", ""))
+    if any(p in picked for p in ("TikuYanxi", "TikuLike")) and not values.get("tiku.tokens", "").strip():
+        return "选择了言溪 / LIKE 知识库，但还没填写 TOKEN"
+    if "TikuGo" in picked and not values.get("tiku.go_authorization", "").strip():
+        return "选择了 GO 题，但还没填写授权码"
+    if "TikuAdapter" in picked and not values.get("tiku.url", "").strip():
+        return "选择了 TikuAdapter，但还没填写服务地址"
     return ""
 
 
