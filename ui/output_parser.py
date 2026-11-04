@@ -185,6 +185,14 @@ class OutputParser:
             rest = line[len(prompt):].strip()
             return [LogEvent("WARNING", prompt), *(self.parse_line(rest) if rest else [])]
 
+        # tqdm redraws its bar with a leading carriage return and no line end, so a preview line printed
+        # while a video is running arrives glued behind the bar ("...| 06:22/12:44__CX_...").
+        # Split there, or the quiz / video event is lost as an ordinary log line.
+        for prefix in (VIDEO_PREVIEW_PREFIX, WORK_PREVIEW_PREFIX):
+            at = line.find(prefix)
+            if at > 0:
+                return [*self.parse_line(line[:at]), *self.parse_line(line[at:])]
+
         if line.startswith(VIDEO_PREVIEW_PREFIX):
             data = _parse_json(line.removeprefix(VIDEO_PREVIEW_PREFIX))
             if data is None:

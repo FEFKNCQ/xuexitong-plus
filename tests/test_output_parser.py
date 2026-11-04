@@ -167,6 +167,21 @@ class WorkPreviewEmitTestCase(unittest.TestCase):
 
 
 
+class GluedPreviewTestCase(unittest.TestCase):
+    def test_preview_after_progress_bar(self):
+        # tqdm leaves its bar without a line end, so the next print is glued to it.
+        parser = OutputParser()
+        quiz = json.dumps({"phase": "questions", "questions": [{"index": 1, "title": "越剧的发源地是（）"}]}, ensure_ascii=False)
+        video = json.dumps({"source": "https://s2.cldisk.com/a.mp4", "title": "3.2.mp4"}, ensure_ascii=False)
+        cr, lf = chr(13), chr(10)
+        events = parser.feed(cr + "3.1认识越剧.mp4:  50%|█████     | 06:22/12:44__CX_WORK_PREVIEW__" + quiz + lf
+                             + cr + "3.1认识越剧.mp4:  51%|█████     | 06:30/12:44__CX_VIDEO_PREVIEW__" + video + lf)
+        kinds = [type(e).__name__ for e in events]
+        self.assertEqual(kinds, ["ProgressEvent", "WorkPreviewEvent", "ProgressEvent", "VideoPreviewEvent"])
+        self.assertEqual(events[1].phase, "questions")
+        self.assertEqual(events[0].done, "06:22")
+        self.assertEqual(events[3].title, "3.2.mp4")
+
 class ClockSecondsTestCase(unittest.TestCase):
     def test_formats(self):
         from ui.output_parser import clock_seconds
