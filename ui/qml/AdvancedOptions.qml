@@ -34,6 +34,8 @@ Card {
 
     // Embedded in the 开始引导: no header row (title, icon, edit button).
     property bool embedded: false
+    // All groups one after another (with their own headings) instead of tabs: the 开始引导 uses this.
+    property bool stacked: false
 
     actions: [
         IconButton {
@@ -45,12 +47,14 @@ Card {
     ]
 
     Segmented {
+        visible: !adv.stacked
         Layout.fillWidth: false
         model: adv.groups.map((g, i) => ({ value: String(i), label: g.title }))
         current: String(adv.tab)
         onPicked: value => adv.tab = parseInt(value)
     }
     Text {
+        visible: !adv.stacked
         Layout.fillWidth: true
         text: adv.groups.length ? adv.groups[adv.tab].subtitle : ""
         color: Theme.muted
@@ -62,8 +66,9 @@ Card {
     // One page per group; the active one slides in like the app's pages.
     Item {
         id: pages
+        visible: !adv.stacked
         Layout.fillWidth: true
-        implicitHeight: adv.groups.length ? stack.children[adv.tab].implicitHeight : 0
+        implicitHeight: !adv.stacked && adv.groups.length ? stack.children[adv.tab].implicitHeight : 0
         Behavior on implicitHeight { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
         clip: true
         enabled: !controller.running
@@ -72,7 +77,7 @@ Card {
             id: stack
             anchors.fill: parent
             Repeater {
-                model: adv.groups
+                model: adv.stacked ? [] : adv.groups
                 ColumnLayout {
                     id: groupPage
                     required property var modelData
@@ -86,23 +91,60 @@ Card {
                     Behavior on opacity { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
                     Behavior on x { NumberAnimation { duration: Theme.slow; easing.type: Easing.OutCubic } }
 
-                    Repeater {
-                        model: groupPage.modelData.fields
-                        Loader {
-                            required property var modelData
-                            Layout.fillWidth: true
-                            active: adv.shown(modelData)
-                            visible: active
-                            property var field: modelData
-                            sourceComponent: ({
-                                heading: headingField, switch: switchField, number: numberField,
-                                percent: percentField, choice: choiceField, providers: providersField,
-                                text: textField, secret: textField, localmodels: localModelsField,
-                                aiprovider: aiProviderField, modelpicker: modelPickerField
-                            })[modelData.type]
-                        }
+                    GroupFields { Layout.fillWidth: true; group: groupPage.modelData }
+                }
+            }
+        }
+    }
+
+    // Stacked: every group with its heading.
+    ColumnLayout {
+        visible: adv.stacked
+        Layout.fillWidth: true
+        spacing: 18
+        enabled: !controller.running
+        Repeater {
+            model: adv.stacked ? adv.groups : []
+            ColumnLayout {
+                id: section
+                required property var modelData
+                required property int index
+                Layout.fillWidth: true
+                spacing: 10
+                Rectangle { visible: section.index > 0; Layout.fillWidth: true; height: 1; color: Theme.border }
+                RowLayout {
+                    spacing: 10
+                    Text { text: section.modelData.icon; font.family: Theme.iconFont; font.pixelSize: 16; color: Theme.accent }
+                    ColumnLayout {
+                        spacing: 1
+                        Text { text: section.modelData.title; color: Theme.text; font.family: Theme.uiFont; font.pixelSize: 15; font.weight: Font.DemiBold }
+                        Text { text: section.modelData.subtitle; color: Theme.muted; font.family: Theme.uiFont; font.pixelSize: 12 }
                     }
                 }
+                GroupFields { Layout.fillWidth: true; group: section.modelData }
+            }
+        }
+    }
+
+    // The fields of one group, each through a Loader that picks the control by type.
+    component GroupFields: ColumnLayout {
+        id: gf
+        property var group: ({ fields: [] })
+        spacing: 10
+        Repeater {
+            model: gf.group.fields
+            Loader {
+                required property var modelData
+                Layout.fillWidth: true
+                active: adv.shown(modelData)
+                visible: active
+                property var field: modelData
+                sourceComponent: ({
+                    heading: headingField, switch: switchField, number: numberField,
+                    percent: percentField, choice: choiceField, providers: providersField,
+                    text: textField, secret: textField, localmodels: localModelsField,
+                    aiprovider: aiProviderField, modelpicker: modelPickerField
+                })[modelData.type]
             }
         }
     }

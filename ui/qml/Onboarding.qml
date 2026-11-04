@@ -31,7 +31,7 @@ Rectangle {
         return i
     }
     readonly property bool agreed: typed === target
-    readonly property var steps: ["欢迎", "免责声明", "账号", "答题设置", "开始使用"]
+    readonly property var steps: ["欢迎", "免责声明", "账号", "高级设置", "开始使用"]
     readonly property int lastStep: steps.length - 1
     readonly property bool accountReady: controller.useCookies
         || (controller.username.trim() !== "" && controller.password !== "")
@@ -406,16 +406,16 @@ Rectangle {
                     }
                 }
 
-                // 3 答题设置: the 高级选项 card itself (答题来源 / 答题 / 通知推送)
+                // 3 高级设置: the whole 高级选项 card, all three parts stacked (答题来源 / 答题 / 通知推送)
                 Page {
                     pageIndex: 3
                     ColumnLayout {
                         anchors.fill: parent
                         spacing: 10
-                        Text { text: "答题设置"; color: Theme.text; font.family: Theme.uiFont; font.pixelSize: 22; font.weight: Font.Bold }
+                        Text { text: "高级设置"; color: Theme.text; font.family: Theme.uiFont; font.pixelSize: 22; font.weight: Font.Bold }
                         Text {
                             Layout.fillWidth: true
-                            text: "选择章节检测用题库还是 AI 找答案，并填写对应的 TOKEN 或接口地址、API Key。之后都可以在“设置 → 高级选项”里修改。"
+                            text: "依次设置答题来源（题库或 AI 的 TOKEN、接口地址、API Key）、答题和通知推送，往下滚动可以看到全部。之后都可以在“设置 → 高级选项”里修改。"
                             color: Theme.muted
                             font.family: Theme.uiFont
                             font.pixelSize: 13
@@ -431,6 +431,7 @@ Rectangle {
                             AdvancedOptions {
                                 width: answerScroll.availableWidth
                                 embedded: true
+                                stacked: true
                                 title: ""
                                 subtitle: ""
                                 icon: ""
@@ -476,8 +477,8 @@ Rectangle {
                                 ? "你选择了稍后配置账号。\n开始运行前，请先到“设置 → 账号”填写账号密码，或开启 cookies 登录。运行面板顶部也会一直提醒你。"
                                 : (controller.useCookies ? "将使用本地 cookies 登录。" : "已保存账号 " + controller.username + "。")
                                     + (guide.answerSkipped || controller.answerSetupProblem !== ""
-                                        ? "\n答题设置还没完成，章节检测找不到答案的题目会随机作答；可以在“设置 → 高级选项”里补上。"
-                                        : "\n答题设置已保存。")
+                                        ? "\n高级设置还没完成，章节检测找不到答案的题目会随机作答；可以在“设置 → 高级选项”里补上。"
+                                        : "\n高级设置已保存。")
                                     + "\n进入运行面板后，在左侧“基本参数”里选择课程和速度，再点击“开始运行”。"
                             color: Theme.muted
                             font.family: Theme.uiFont

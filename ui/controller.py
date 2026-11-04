@@ -45,7 +45,8 @@ APP_NAME = "学习通PLUS"
 APP_VERSION = "1.1.8"
 # Bump whenever the 开始引导 changes: everyone who finished an older guide sees it again.
 # 1: 欢迎 / 免责声明 / 账号 / 开始使用   2: + 答题设置 (1.1.7)
-ONBOARDING_VERSION = 2
+# 3: 答题设置 -> 高级设置, showing 答题来源 / 答题 / 通知推送 together (1.1.9)
+ONBOARDING_VERSION = 3
 ROOT_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 BUNDLE_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else ROOT_DIR
 
