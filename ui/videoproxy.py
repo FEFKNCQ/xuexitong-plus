@@ -39,6 +39,20 @@ def allowed(url: str, hosts: tuple[str, ...]) -> bool:
     return parts.scheme in ("http", "https") and any(host == h or host.endswith("." + h) for h in hosts)
 
 
+class _QuietServer(ThreadingHTTPServer):
+    """The <video> element drops connections all the time (seeking, a new preview, the view being
+    recreated); socketserver would print a traceback into gui.log for each one."""
+
+    daemon_threads = True
+
+    def handle_error(self, request, client_address):
+        import sys
+
+        if isinstance(sys.exc_info()[1], (ConnectionAbortedError, ConnectionResetError, BrokenPipeError, TimeoutError)):
+            return
+        super().handle_error(request, client_address)
+
+
 class VideoProxy:
     def __init__(self, allowed_hosts: tuple[str, ...] = ("chaoxing.com", "cldisk.com"), referer: str = REFERER) -> None:
         self.allowed_hosts = allowed_hosts
@@ -67,8 +81,7 @@ class VideoProxy:
             def do_GET(self):
                 proxy._serve(self, head=False)
 
-        self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        self._server.daemon_threads = True
+        self._server = _QuietServer(("127.0.0.1", 0), Handler)
         self._thread = threading.Thread(target=self._server.serve_forever, name="video-proxy", daemon=True)
         self._thread.start()
 
