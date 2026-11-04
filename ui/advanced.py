@@ -166,8 +166,8 @@ GROUPS: list[dict] = [
                "只在课程允许多次作答时开启"),
             _f("common", "work_max_retries", "number", "最多重做次数", "3",
                min=1, max=10, step=1, decimals=0, suffix="次", show={"key": "common.work_redo_enabled", "on": True}),
-            _f("tiku", "true_list", "text", "判断题“正确”的写法", "正确,对,√,是", "英文逗号隔开，不要加空格或引号"),
-            _f("tiku", "false_list", "text", "判断题“错误”的写法", "错误,错,×,否,不对,不正确", "英文逗号隔开，不要加空格或引号"),
+            _f("tiku", "true_list", "text", "判断题“正确”的写法", "正确,对,√,是,true,t,1,yes,y", "英文逗号隔开，不要加空格或引号"),
+            _f("tiku", "false_list", "text", "判断题“错误”的写法", "错误,错,×,否,不对,不正确,false,f,0,no,n", "英文逗号隔开，不要加空格或引号"),
         ],
     },
     {

@@ -121,6 +121,23 @@ class AdvancedOptionsTest(unittest.TestCase):
         like.load_config()
         self.assertEqual((like._search, like._vision, like._retry), (False, True, True))
 
+    def test_judgement_word_lists(self):
+        from api.answer_check import check_judgement
+        values = advanced.read_values(template())
+        true_words = values["tiku.true_list"].split(",")
+        false_words = values["tiku.false_list"].split(",")
+        defaults = {f["id"]: f["default"] for f in advanced.fields()}
+        self.assertEqual(values["tiku.true_list"], defaults["tiku.true_list"])     # template == 高级选项
+        self.assertEqual(values["tiku.false_list"], defaults["tiku.false_list"])
+        self.assertFalse({w.lower() for w in true_words} & {w.lower() for w in false_words})
+        for word in true_words:
+            self.assertEqual(check_judgement(word, true_words, false_words), 1, word)
+            self.assertEqual(check_judgement(word.upper(), true_words, false_words), 1, word)
+        for word in false_words:
+            self.assertEqual(check_judgement(word, true_words, false_words), 0, word)
+        # Whole-word match only: a longer answer containing "n" or "t" is not a judgement.
+        self.assertEqual(check_judgement("not sure", true_words, false_words), -1)
+
     def test_normalize(self):
         self.assertEqual(advanced.normalize("x", True), "true")
         self.assertEqual(advanced.normalize("x", False), "false")
