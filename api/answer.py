@@ -130,16 +130,47 @@ class CacheDAO:
         data = self._read_cache()
         return data.get(question)
 
-    def add_cache(self, question: str, answer: str) -> None:
+    def add_cache(self, question: str, answer: str, origin: Optional[str] = None) -> None:
         # 为缓存写入加锁，防止并发写入损坏文件
         with self._lock:
             data = self._read_cache()
             data[question] = answer
             self._write_cache(data)
+            if origin:
+                self._write_origin(question, origin)
+
+    # 答案来源（"tiku" 题库 / "ai" 大模型）单独存在 cache_origin.json，
+    # cache.json 的格式保持 {题目: 答案} 不变。
+    def _origin_file(self) -> Path:
+        return self.cache_file.with_name(self.cache_file.stem + "_origin.json")
+
+    def get_origin(self, question: str) -> Optional[str]:
+        try:
+            with self._origin_file().open("r", encoding="utf8") as fp:
+                return json.load(fp).get(question)
+        except (OSError, ValueError, AttributeError):
+            return None
+
+    def _write_origin(self, question: str, origin: str) -> None:
+        path = self._origin_file()
+        try:
+            with path.open("r", encoding="utf8") as fp:
+                data = json.load(fp)
+            if not isinstance(data, dict):
+                data = {}
+        except (OSError, ValueError):
+            data = {}
+        data[question] = origin
+        try:
+            with path.open("w", encoding="utf8") as fp:
+                json.dump(data, fp, ensure_ascii=False)
+        except OSError as e:
+            logger.debug(f"写入答案来源失败: {e}")
 
 
 class Tiku(ABC):
     CONFIG_PATH = os.path.join(os.getcwd(), "config.ini")
+    ORIGIN = "tiku"  # 答案来源：题库 "tiku" / 大模型 "ai"（显示在桌面版答题面板）
     DISABLE = False  # 停用标志
     SUBMIT = False  # 提交标志
     COVER_RATE = 0.8  # 覆盖率
@@ -266,9 +297,12 @@ class Tiku(ABC):
 
     def query_all(self, q_list: list[dict], query_delay: float = 0.0) -> list[Optional[str]]:
         if self.DISABLE:
+            self.last_origins = [None] * len(q_list)
             return [None] * len(q_list)
 
         results = [None] * len(q_list)
+        # 每道题答案的来源，与返回的答案一一对应（没有答案为 None）
+        self.last_origins = [None] * len(q_list)
         pending_indices = []
 
         cache_dao = CacheDAO()
@@ -290,6 +324,7 @@ class Tiku(ABC):
             if answer:
                 logger.info(f"从缓存中获取答案：{q['title']} -> {answer}")
                 results[idx] = answer.strip()
+                self.last_origins[idx] = cache_dao.get_origin(q['title']) or "tiku"
             else:
                 pending_indices.append(idx)
 
@@ -297,7 +332,9 @@ class Tiku(ABC):
             return results
 
         sub_q_list = [q_list[idx] for idx in pending_indices]
+        self._sub_origins = None
         sub_results = self._query_all(sub_q_list, query_delay=query_delay)
+        sub_origins = self._sub_origins if isinstance(self._sub_origins, list) else []
 
         if not isinstance(sub_results, list):
             logger.error(f"{self.name} _query_all 返回结果格式异常，期望列表")
@@ -309,14 +346,16 @@ class Tiku(ABC):
             sub_results = list(sub_results) + [None] * (len(pending_indices) - len(sub_results))
             sub_results = sub_results[:len(pending_indices)]
 
-        for idx, ans in zip(pending_indices, sub_results):
+        for pos, (idx, ans) in enumerate(zip(pending_indices, sub_results)):
             q_info = q_list[idx]
             if ans:
                 ans = ans.strip()
                 logger.info(f"从{self.name}获取答案：{q_info['title']} -> {ans}")
                 if check_answer(ans, q_info['type'], self):
-                    cache_dao.add_cache(q_info['title'], ans)
+                    origin = (sub_origins[pos] if pos < len(sub_origins) else None) or self.ORIGIN
+                    cache_dao.add_cache(q_info['title'], ans, origin)
                     results[idx] = ans
+                    self.last_origins[idx] = origin
                 else:
                     logger.info(f"从{self.name}获取到的答案类型与题目类型不符，已舍弃")
             else:
@@ -512,6 +551,8 @@ class TikuFallback(Tiku):
 
     def _query_all(self, q_list: list[dict], query_delay: float = 0.0) -> list[Optional[str]]:
         results = [None] * len(q_list)
+        origins = [None] * len(q_list)
+        self._sub_origins = origins
         pending_indices = list(range(len(q_list)))
 
         for provider in self.providers:
@@ -537,11 +578,13 @@ class TikuFallback(Tiku):
                     f"{provider.name} 批量查询返回结果长度（{len(sub_results)}）与请求题目数（{len(pending_indices)}）不匹配，跳过该题库以防答案错位")
                 continue
 
+            provider_origins = getattr(provider, 'last_origins', None) or []
             next_pending_indices = []
-            for orig_idx, ans in zip(pending_indices, sub_results):
+            for pos, (orig_idx, ans) in enumerate(zip(pending_indices, sub_results)):
                 if ans:
                     logger.info(f'{provider.name} 命中答案: {q_list[orig_idx]["title"]} -> {ans}')
                     results[orig_idx] = ans
+                    origins[orig_idx] = (provider_origins[pos] if pos < len(provider_origins) else None) or provider.ORIGIN
                 else:
                     logger.info(f'{provider.name} 未命中或返回答案无效，将回退')
                     next_pending_indices.append(orig_idx)
@@ -1166,6 +1209,7 @@ class TikuAdapter(Tiku):
 
 class AI(Tiku):
     # AI大模型答题实现
+    ORIGIN = "ai"
     def __init__(self, config_path: Optional[str] = None) -> None:
         """初始化AI大模型答题实现."""
         super().__init__(config_path)
@@ -1413,6 +1457,7 @@ class AI(Tiku):
                 return False
 
 class SiliconFlow(Tiku):
+    ORIGIN = "ai"
 
     def __init__(self, config_path: Optional[str] = None):
         """初始化硅基流动大模型题库."""

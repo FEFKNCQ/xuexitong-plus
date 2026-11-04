@@ -57,6 +57,7 @@ def _work_preview_questions(question_list) -> list[dict]:
                 "options": q.get("options", ""),
                 "answer": (q.get("answerField") or {}).get(f"answer{qid}", ""),
                 "source": q.get(f"answerSource{qid}", ""),
+                "origin": q.get(f"answerOrigin{qid}", ""),
             })
     except Exception:
         pass
@@ -1239,7 +1240,11 @@ class Chaoxing:
                 answers = list(answers) + [None] * (total_questions - len(answers))
                 answers = answers[:total_questions]
 
-            for q, res in zip(questions["questions"], answers):
+            origins = getattr(self.tiku, "last_origins", None)
+            if not isinstance(origins, list) or len(origins) != total_questions:
+                origins = [None] * total_questions
+            for q, res, origin in zip(questions["questions"], answers, origins):
+                q[f'answerOrigin{q["id"]}'] = origin or ""
                 logger.debug(f"当前题目信息 -> {q}")
                 answer = ""
                 if not res:

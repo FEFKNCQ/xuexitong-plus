@@ -49,7 +49,7 @@
 GUI 启动 worker 时设置 `CHAOXING_DESKTOP_PREVIEW=1`（以及 `PYTHONUNBUFFERED=1`）。`api/base.py` 通过标准输出发送两种事件行，`ui/output_parser.py` 解析，不会进入普通日志：
 
 - `__CX_VIDEO_PREVIEW__{"source","title"}`：获取视频状态后发送。`ui/controller.py` 生成静音、无控件的 HTML，交给 `VideoView.qml` 里的 WebView。Windows 构建使用 Qt WebView 的 native/WebView2 后端，运行机器需要 WebView2 Runtime。WebView2 后端不支持 `loadHtml` 的 base URL（页面按 `about:blank` 处理）。
-- `__CX_WORK_PREVIEW__{...}`：`study_work` 填好答案、提交前发送 `phase=filled`（题目、选项、所填答案、来源、覆盖率），提交后发送 `submitted` / `saved` / `failed`。由 `_emit_work_preview` 输出，异常全部吞掉，不影响答题流程。`WorkView.qml` 用 QML 原生绘制，不加载学习通网页。
+- `__CX_WORK_PREVIEW__{...}`：`study_work` 填好答案、提交前发送 `phase=filled`（题目、选项、所填答案、来源、覆盖率），提交后发送 `submitted` / `saved` / `failed`。由 `_emit_work_preview` 输出，异常全部吞掉，不影响答题流程。题目一读取到就先发 `phase=questions`（答案未填，界面显示“查找中”，AI 讲解可立即使用），不必等查找答案结束。每题带 `source`（cover / random）和 `origin`（找到答案的来源：`tiku` 题库或 `ai` 大模型，来自各题库类的 `ORIGIN` 和 `Tiku.last_origins`），面板据此显示 题库匹配 / AI匹配 / 随机作答。答案缓存 `cache.json` 格式不变，来源另存在 `cache_origin.json`，旧缓存没有记录的按题库算。`WorkView.qml` 用 QML 原生绘制，不加载学习通网页。
 
 视频预览地址必须来自学习通视频状态响应并通过现有域名检查。真实课程画面尚未用用户账号验证，若调整该流程，需要分别检查无可用地址、加载失败和任务结束时的面板状态。
 

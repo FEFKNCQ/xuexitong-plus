@@ -144,6 +144,8 @@ def build_work_view(data: dict, pending: bool = False) -> dict:
             "options": options,
             "answerText": answer if not options else "",
             "fromBank": raw.get("source") == "cover",
+            # Where a found answer came from: "ai" (大模型) or "tiku" (题库 / 缓存).
+            "fromAI": raw.get("source") == "cover" and raw.get("origin") == "ai",
             "pending": pending,
         })
     return {
