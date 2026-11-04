@@ -1,3 +1,9 @@
+> **涓嬭浇璇存槑**
+> 浼樺厛鎺ㄨ崘浠庣櫨搴︾綉鐩樹笅杞斤紙鍚畬鏁?release 鏂囦欢锛屽彲鐢ㄦ彁鍙栫爜鑾峰彇锛夛紝鏃犻渶璁块棶 GitHub锛歚n> **鐧惧害缃戠洏**锛?baidu
+>
+> **澶稿厠缃戠洏**锛?quark
+>
+> 涔熷彲鍦?[鏈粨搴?Releases](https://github.com/FEFKNCQ/xuexitong-plus/releases) 涓嬭浇銆俙n
 <p align="center">
   <img src="assets/learning_plus.png" width="96" alt="学习通PLUS 图标">
 </p>
