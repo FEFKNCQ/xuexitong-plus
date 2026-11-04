@@ -21,6 +21,7 @@ from requests.adapters import HTTPAdapter
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception
 from tqdm import tqdm
 
+from api import pause
 from api.answer import Tiku, TikuManual
 from api.answer_check import cut
 from api.cipher import AESCipher
@@ -1059,6 +1060,9 @@ class Chaoxing:
                     last_log_time = play_time
 
                     logger.trace("Progress logged")
+
+                # 桌面版暂停时在这里等待；暂停的时间不算观看时长，继续后进度不会跳一大截
+                last_iter += pause.wait_if_paused()
 
                 # Uploading the progress takes time, we assume that the video is still playing in the background, this manually calculates the time elapsed
                 dt = (time.time() - last_iter) * _speed

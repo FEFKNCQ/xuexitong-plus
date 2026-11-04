@@ -19,9 +19,11 @@ Rectangle {
     }
 
     readonly property color fg: kind === "running" ? Theme.warning
+        : kind === "paused" ? Theme.accent
         : kind === "error" ? Theme.danger
         : kind === "done" ? Theme.success : Theme.muted
     readonly property color bgc: kind === "running" ? Theme.warningSoft
+        : kind === "paused" ? Theme.accentSoft
         : kind === "error" ? Theme.dangerSoft
         : kind === "done" ? Theme.successSoft : Theme.surfaceAlt
 

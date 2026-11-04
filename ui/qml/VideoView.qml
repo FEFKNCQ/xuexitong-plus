@@ -50,6 +50,15 @@ Rectangle {
         onLoaded: root.reload()
     }
 
+    // Pause the picture with the run (and when a new view is created while paused).
+    Connections {
+        target: controller
+        function onPauseChanged() {
+            if (webLoader.item)
+                webLoader.item.runJavaScript("window.cxPause && cxPause(" + controller.paused + ")")
+        }
+    }
+
     // Keep the picture in step with the task while it plays.
     Connections {
         target: controller

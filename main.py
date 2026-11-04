@@ -9,6 +9,7 @@ import traceback
 from dataclasses import dataclass
 from typing import Any
 from tqdm import tqdm
+from api import pause
 from api.answer import Tiku
 from api.base import Chaoxing, Account, StudyResult
 from api.exceptions import LoginError, InputFormatError
@@ -269,6 +270,8 @@ def init_chaoxing(common_config, tiku_config, config_path=None):
 
 def process_job(chaoxing: Chaoxing, course: dict, job: dict, job_info: dict, speed: float) -> StudyResult:
     """处理单个任务点"""
+    # 桌面版暂停时，不开始新的任务点
+    pause.wait_if_paused()
     # 视频任务
     if job["type"] == "video":
         logger.trace(f"识别到视频任务, 任务章节: {course['title']} 任务ID: {job['jobid']}")

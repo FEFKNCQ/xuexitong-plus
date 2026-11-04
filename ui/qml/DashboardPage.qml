@@ -70,6 +70,18 @@ Item {
                 Item { Layout.fillWidth: true }
                 StatusPill { text: controller.status; kind: controller.statusKind }
 
+                // 暂停 / 继续, next to start / stop while a run is going.
+                AppButton {
+                    text: controller.paused ? "继续" : "暂停"
+                    glyph: controller.paused ? "" : ""
+                    kind: controller.paused ? "primary" : "ghost"
+                    opacity: controller.running ? 1 : 0
+                    visible: opacity > 0.01
+                    enabled: controller.running
+                    Behavior on opacity { NumberAnimation { duration: Theme.normal } }
+                    onClicked: controller.paused ? controller.resumeRun() : controller.pauseRun()
+                }
+
                 // Start / stop swap with a crossfade.
                 Item {
                     implicitWidth: Math.max(startButton.implicitWidth, stopButton.implicitWidth)

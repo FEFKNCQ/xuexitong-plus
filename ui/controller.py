@@ -55,6 +55,8 @@ if os.name == "nt":
 else:
     DATA_DIR = Path.home() / ".config" / "chaoxing-desktop"
 CONFIG_PATH = DATA_DIR / "config.ini"
+# 暂停标记：存在时任务进程在安全位置等待（api/pause.py）
+PAUSE_FILE = DATA_DIR / "pause.flag"
 
 SPEED_OPTIONS = ["1", "1.25", "1.5", "1.75", "2"]
 VIDEO_BASE_URL = "https://mooc1.chaoxing.com/ananas/modules/video/index.html?v=2025-0725-1842"
@@ -121,6 +123,7 @@ def video_source_html(source: str) -> str:
         const seekTo=t=>{{if(!(t>=0)||!isFinite(player.duration))return;player.currentTime=Math.min(t,Math.max(0,player.duration-0.5));}};
         player.addEventListener('loadedmetadata',()=>{{player.playbackRate=rate;seekTo(parseFloat(hash.get('t')));}},{{once:true}});
         window.cxSync=t=>{{if(player.readyState>=1&&Math.abs(player.currentTime-t)>4)seekTo(t);}};
+        window.cxPause=p=>{{if(p)player.pause();else player.play().catch(()=>{{}});}};
         player.addEventListener('canplay',()=>player.play().catch(()=>{{}}),{{once:true}});
         player.addEventListener('loadeddata',()=>player.play().catch(()=>{{}}),{{once:true}});
         player.addEventListener('error',()=>{{document.body.innerHTML='<div style="color:#8e9bb3;font:14px Segoe UI;display:flex;height:100%;align-items:center;justify-content:center">视频加载失败</div>'}},true);
@@ -215,6 +218,7 @@ class AppController(QObject):
         self._status = "就绪"
         self._status_kind = "idle"
         self._started_at = 0.0
+        self._paused = False
         self._elapsed = 0
         self._course = ""
         self._chapter = ""
@@ -629,6 +633,55 @@ class AppController(QObject):
         self._status_kind = kind
         self.runStateChanged.emit()
 
+    # ----- 暂停 / 继续 -----------------------------------------------------
+    pauseChanged = Signal()
+    paused = Property(bool, lambda self: self._paused, notify=pauseChanged)
+
+    @staticmethod
+    def _clear_pause_flag() -> None:
+        try:
+            PAUSE_FILE.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    def _set_paused(self, value: bool) -> None:
+        if value:
+            try:
+                DATA_DIR.mkdir(parents=True, exist_ok=True)
+                PAUSE_FILE.write_text("paused", encoding="utf-8")
+            except OSError as exc:
+                self.toast.emit(f"暂停失败：{exc}", "error")
+                return
+        else:
+            self._clear_pause_flag()
+        if self._paused == value:
+            return
+        self._paused = value
+        if self._process is not None:
+            if value:
+                self._clock.stop()       # 运行时长 does not count the pause
+                self._set_status("已暂停", "paused")
+            else:
+                self._started_at = time.monotonic() - self._elapsed
+                self._clock.start()
+                self._set_status("正在运行", "running")
+        self.pauseChanged.emit()
+
+    @Slot()
+    def pauseRun(self) -> None:
+        if self._process is None or self._paused:
+            return
+        self._set_paused(True)
+        if self._paused:
+            self._log("INFO", "已暂停：正在进行的请求完成后停下，视频观看时长不计入暂停的时间")
+
+    @Slot()
+    def resumeRun(self) -> None:
+        if self._process is None or not self._paused:
+            return
+        self._set_paused(False)
+        self._log("INFO", "已继续运行")
+
     def _tick(self) -> None:
         self._elapsed = int(time.monotonic() - self._started_at)
         self.dashboardChanged.emit()
@@ -780,6 +833,8 @@ class AppController(QObject):
         environment.insert("PYTHONUTF8", "1")
         environment.insert("PYTHONUNBUFFERED", "1")
         environment.insert("CHAOXING_DESKTOP_PREVIEW", "1")
+        self._clear_pause_flag()
+        environment.insert("CHAOXING_PAUSE_FILE", str(PAUSE_FILE))
         process.setProcessEnvironment(environment)
         process.start(str(program), arguments)
         if not process.waitForStarted(2500):
@@ -808,6 +863,7 @@ class AppController(QObject):
     def stopRun(self) -> None:
         if self._process is None:
             return
+        self._set_paused(False)          # a paused worker must not sit waiting while it is stopped
         self._process.terminate()
         QTimer.singleShot(1800, self._kill_if_running)
         self._log("WARNING", "已发送停止请求。")
@@ -818,6 +874,7 @@ class AppController(QObject):
 
     @Slot()
     def shutdown(self) -> None:
+        self._clear_pause_flag()
         self._updater.shutdown()
         self._video_proxy.stop()
         if self._process and self._process.state() != QProcess.ProcessState.NotRunning:
@@ -911,6 +968,7 @@ class AppController(QObject):
 
     def _on_finished(self, exit_code: int, _status) -> None:
         self._read_output(final=True)
+        self._set_paused(False)
         self._clock.stop()
         self._task_model.finish_running()
         ok = exit_code == 0
