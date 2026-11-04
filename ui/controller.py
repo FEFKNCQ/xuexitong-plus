@@ -43,6 +43,9 @@ from ui.output_parser import (
 
 APP_NAME = "学习通PLUS"
 APP_VERSION = "1.1.7"
+# Bump whenever the 开始引导 changes: everyone who finished an older guide sees it again.
+# 1: 欢迎 / 免责声明 / 账号 / 开始使用   2: + 答题设置 (1.1.7)
+ONBOARDING_VERSION = 2
 ROOT_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
 BUNDLE_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else ROOT_DIR
 
@@ -60,6 +63,15 @@ TYPE_LABELS = {
     "judgement": "判断题",
     "completion": "填空题",
 }
+
+
+def onboarding_done(done, version) -> bool:
+    """Finished the current 开始引导? A guide finished before it last changed does not count."""
+    try:
+        seen = int(version or 0)
+    except (TypeError, ValueError):
+        seen = 0
+    return str(done).lower() == "true" and seen >= ONBOARDING_VERSION
 
 
 def load_config() -> configparser.ConfigParser:
@@ -520,13 +532,15 @@ class AppController(QObject):
     def _onboarding_done(self) -> bool:
         if os.environ.get("CHAOXING_DESKTOP_ONBOARDING") == "1":
             return False
-        return str(self._settings.value("onboarding/done", "false")).lower() == "true"
+        return onboarding_done(self._settings.value("onboarding/done", "false"),
+                               self._settings.value("onboarding/version", 0))
 
     onboardingDone = Property(bool, _onboarding_done, notify=onboardingChanged)
 
     @Slot()
     def finishOnboarding(self) -> None:
         self._settings.setValue("onboarding/done", "true")
+        self._settings.setValue("onboarding/version", ONBOARDING_VERSION)
         self._settings.setValue("onboarding/disclaimerVersion", APP_VERSION)
         self.onboardingChanged.emit()
 
