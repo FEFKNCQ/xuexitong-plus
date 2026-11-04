@@ -21,6 +21,7 @@ Rectangle {
     // and Chromium does not load <video> on a hidden page. So the web view only exists while
     // it is on screen, and every show creates a fresh one.
     readonly property bool webLive: root.visible && root.showWeb && Window.window !== null && Window.window.visible
+                                    && Theme.onScreen   // no video decoding while minimized
 
     function reload() {
         const view = webLoader.item
@@ -108,7 +109,7 @@ Rectangle {
             }
             opacity: 0.6
             SequentialAnimation on opacity {
-                running: root.visible && !root.showWeb && Theme.motion
+                running: root.visible && !root.showWeb && Theme.loopMotion
                 loops: Animation.Infinite
                 NumberAnimation { to: 0.15; duration: 1800; easing.type: Easing.InOutSine }
                 NumberAnimation { to: 0.6; duration: 1800; easing.type: Easing.InOutSine }

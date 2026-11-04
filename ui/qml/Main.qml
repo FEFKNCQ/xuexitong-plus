@@ -49,6 +49,10 @@ ApplicationWindow {
 
     function openSettings() { window.page = 2 }
 
+    // Hidden to the tray or minimized: nothing on screen to animate or play.
+    readonly property bool onScreen: window.visible && window.visibility !== Window.Minimized
+    onOnScreenChanged: Theme.onScreen = window.onScreen
+
     // Only the normal (not maximized) size is remembered.
     Settings {
         id: windowSettings
@@ -297,7 +301,7 @@ ApplicationWindow {
                                             color: window.accountConfigured ? Theme.accent : Theme.warning
                                             Layout.rightMargin: 12
                                             SequentialAnimation on scale {
-                                                running: index === 2 && !window.accountConfigured && Theme.motion
+                                                running: index === 2 && !window.accountConfigured && Theme.loopMotion
                                                 loops: Animation.Infinite
                                                 NumberAnimation { to: 1.5; duration: 700; easing.type: Easing.InOutSine }
                                                 NumberAnimation { to: 1.0; duration: 700; easing.type: Easing.InOutSine }

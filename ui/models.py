@@ -14,7 +14,12 @@ LEVEL_GROUPS = {
 
 
 class LogModel(QAbstractListModel):
-    """Keeps the last ``limit`` log lines and exposes a level-filtered view."""
+    """Keeps the last ``limit`` log lines and exposes a level-filtered view.
+
+    Entries are addressed by an absolute sequence number (``_base`` + position), so dropping
+    the oldest line only removes that one row instead of resetting the whole view - a reset
+    per line made the log panel rebuild every row several times a second on long runs.
+    """
 
     LevelRole = Qt.ItemDataRole.UserRole + 1
     MessageRole = Qt.ItemDataRole.UserRole + 2
@@ -27,7 +32,8 @@ class LogModel(QAbstractListModel):
         super().__init__(parent)
         self._limit = limit
         self._entries: list[tuple[str, str, str]] = []
-        self._visible: list[int] = []
+        self._base = 0                  # absolute number of self._entries[0]
+        self._visible: list[int] = []   # absolute numbers of the rows shown
         self._filter = "ALL"
 
     def roleNames(self):
@@ -43,7 +49,7 @@ class LogModel(QAbstractListModel):
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         if not index.isValid() or not 0 <= index.row() < len(self._visible):
             return None
-        level, message, time = self._entries[self._visible[index.row()]]
+        level, message, time = self._entries[self._visible[index.row()] - self._base]
         if role == self.LevelRole:
             return level
         if role in (self.MessageRole, Qt.ItemDataRole.DisplayRole):
@@ -58,7 +64,7 @@ class LogModel(QAbstractListModel):
 
     def _rebuild(self) -> None:
         self.beginResetModel()
-        self._visible = [i for i, entry in enumerate(self._entries) if self._accepts(entry[0])]
+        self._visible = [self._base + i for i, entry in enumerate(self._entries) if self._accepts(entry[0])]
         self.endResetModel()
         self.countChanged.emit()
 
@@ -66,16 +72,23 @@ class LogModel(QAbstractListModel):
         if level in ("TRACE", "DEBUG"):
             return
         self._entries.append((level, message, time))
-        if len(self._entries) > self._limit:
-            del self._entries[: len(self._entries) - self._limit]
-            self._rebuild()
-            return
         if self._accepts(level):
             row = len(self._visible)
             self.beginInsertRows(QModelIndex(), row, row)
-            self._visible.append(len(self._entries) - 1)
+            self._visible.append(self._base + len(self._entries) - 1)
             self.endInsertRows()
-            self.countChanged.emit()
+        overflow = len(self._entries) - self._limit
+        if overflow > 0:
+            del self._entries[:overflow]
+            self._base += overflow
+            gone = 0
+            while gone < len(self._visible) and self._visible[gone] < self._base:
+                gone += 1
+            if gone:
+                self.beginRemoveRows(QModelIndex(), 0, gone - 1)
+                del self._visible[:gone]
+                self.endRemoveRows()
+        self.countChanged.emit()
 
     def _get_filter(self) -> str:
         return self._filter
@@ -95,6 +108,7 @@ class LogModel(QAbstractListModel):
         self.beginResetModel()
         self._entries.clear()
         self._visible.clear()
+        self._base = 0
         self.endResetModel()
         self.countChanged.emit()
 
@@ -102,7 +116,7 @@ class LogModel(QAbstractListModel):
     def visibleText(self) -> str:
         lines = []
         for i in self._visible:
-            level, message, time = self._entries[i]
+            level, message, time = self._entries[i - self._base]
             lines.append(f"{time} {level:<8} {message}".strip())
         return "\n".join(lines)
 

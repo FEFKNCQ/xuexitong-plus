@@ -43,7 +43,7 @@ Rectangle {
             color: pill.fg
             Behavior on color { ColorAnimation { duration: Theme.normal } }
             SequentialAnimation on opacity {
-                running: pill.kind === "running" && Theme.motion
+                running: pill.kind === "running" && Theme.loopMotion
                 loops: Animation.Infinite
                 NumberAnimation { to: 0.25; duration: 700 }
                 NumberAnimation { to: 1; duration: 700 }

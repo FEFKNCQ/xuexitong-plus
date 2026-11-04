@@ -15,7 +15,8 @@ setup = Analysis(
         (str(ROOT / "installer" / "qml"), "installer/qml"),
         (str(ROOT / "assets" / "learning_plus.png"), "assets"),
     ],
-    hiddenimports=["PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuickControls2"],
+    # lzma: the appended payload is an LZMA zip (packaging/make_payload.py); zipfile imports it lazily.
+    hiddenimports=["PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuickControls2", "lzma"],
     excludes=["tkinter", "PySide6.QtWebView", "PySide6.QtWebEngineCore", "PySide6.QtWidgets",
               "numpy", "PIL"],
     noarchive=False,

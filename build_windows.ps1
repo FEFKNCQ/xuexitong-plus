@@ -69,6 +69,11 @@ $versionMatch = Select-String -LiteralPath (Join-Path $projectRoot "ui\controlle
 $appVersion = if ($versionMatch) { $versionMatch.Matches[0].Groups[1].Value } else { "0.0.0" }
 $releaseZip = Join-Path $distRoot "XueXiTong-Plus-Windows-$appVersion.zip"
 Compress-Archive -LiteralPath $releaseDir -DestinationPath $releaseZip -CompressionLevel Optimal -Force
+# The installer carries the same files as an LZMA zip: about a quarter smaller than Deflate.
+# (The no-install zip above stays Deflate so Windows Explorer can open it.)
+$payloadZip = Join-Path $buildRoot "setup-payload.zip"
+& $pythonExe (Join-Path $projectRoot "packaging\make_payload.py") $releaseDir $payloadZip
+if ($LASTEXITCODE -ne 0) { throw "Installer payload build failed." }
 
 # Installer: our own Qt Quick setup program (installer\setup.py) with the release zip
 # appended to the end of the exe. zipfile finds the archive from the file's end.
@@ -82,7 +87,7 @@ Get-ChildItem -LiteralPath $distRoot -Filter "XueXiTong-Plus-Setup-*.exe" -Error
 $installer = Join-Path $distRoot "XueXiTong-Plus-Setup-$appVersion.exe"
 $out = [IO.File]::Open($installer, [IO.FileMode]::Create)
 try {
-    foreach ($part in @((Join-Path $setupDist "setup-stub.exe"), $releaseZip)) {
+    foreach ($part in @((Join-Path $setupDist "setup-stub.exe"), $payloadZip)) {
         $in = [IO.File]::OpenRead($part)
         try { $in.CopyTo($out) } finally { $in.Dispose() }
     }
